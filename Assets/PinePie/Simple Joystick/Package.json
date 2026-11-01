@@ -1,0 +1,12 @@
+{
+    "name": "com.pinepie.joystick",
+    "version": "1.0.0",
+    "displayName": "PinePie Joystick",
+    "description": "Simple mutliplurpose joystick for Unity. It can be used in 2D and 3D games. It is easy to use and customize.",
+    "unity": "2021.1",
+    "author": {
+        "name": "Sourabh vishwakarma",
+        "email": "sv92295351@gmail.com",
+        "url": "https://sites.google.com/view/pinepie/home"
+    }
+}

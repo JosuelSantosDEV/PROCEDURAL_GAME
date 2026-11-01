@@ -1,0 +1,95 @@
+# ---------------------------------------------------------------
+# Unity (2022.3) — mobile (Android/iOS)
+# Regra de ouro: versionar Assets/, Packages/, ProjectSettings/ (com os .meta).
+# Tudo que o Unity consegue regenerar fica de fora.
+# ---------------------------------------------------------------
+
+# Pastas geradas pelo Unity
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+
+# Capturas de memória e gravações
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Dependências baixadas automaticamente (se um dia usar)
+/[Aa]ssets/Plugins/Editor/JetBrains*
+
+# Cache de assets importados (Asset Store / Addressables / build)
+/[Aa]ssets/[Ss]treamingAssets/aa.meta
+/[Aa]ssets/[Ss]treamingAssets/aa/*
+/[Aa]ssets/AddressableAssetsData/*/*.bin*
+/ServerData/
+
+# Pastas de build fora da convenção (ex.: PROCEDURAL_GAME_BUILD ao lado do projeto)
+*_BUILD/
+*_BurstDebugInformation_DoNotShip/
+*_BackUpThisFolder_ButDontShipItWithYourGame/
+
+# Arquivos de projeto gerados pelo Unity para a IDE (são recriados ao abrir o projeto)
+*.csproj
+*.sln
+*.slnx
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# IDEs / editores
+/.vs/
+/.vscode/
+/.idea/
+.utmp/
+*.swp
+*~
+
+# Crashes e relatórios
+sysinfo.txt
+crashlytics-build.properties
+
+# Builds finais — nunca versionar binários
+*.apk
+*.aab
+*.unitypackage
+*.app
+*.ipa
+*.exe
+
+# Android / Gradle / iOS gerados em build
+/[Aa]ssets/Plugins/Android/*.tmp
+*.keystore
+*.jks
+google-services.json
+GoogleService-Info.plist
+/[Ii]os[Bb]uild/
+/[Aa]ndroid[Bb]uild/
+gradle/
+.gradle/
+local.properties
+
+# Contexto local de ferramentas de IA (preferências por máquina). CLAUDE.md é versionado.
+.claude/settings.local.json
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ---------------------------------------------------------------
+# Exceções: versionar mesmo que pareça "gerado"
+# ---------------------------------------------------------------
+!/Packages/manifest.json
+!/Packages/packages-lock.json
