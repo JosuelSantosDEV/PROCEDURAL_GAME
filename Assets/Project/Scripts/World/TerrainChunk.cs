@@ -25,7 +25,11 @@ namespace PROCEDURAL_GAME.World
             mesh.MarkDynamic();
 
             gameObject.GetComponent<MeshFilter>().sharedMesh = mesh;
-            gameObject.GetComponent<MeshRenderer>().sharedMaterial = material;
+            MeshRenderer meshRenderer = gameObject.GetComponent<MeshRenderer>();
+            meshRenderer.sharedMaterial = material;
+            // Sombras dinâmicas desligadas por enquanto: o terreno não projeta nem recebe (poupa processamento no celular).
+            meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            meshRenderer.receiveShadows = false;
             meshCollider = gameObject.GetComponent<MeshCollider>();
 
             gameObject.SetActive(false);

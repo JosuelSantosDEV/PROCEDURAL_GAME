@@ -38,7 +38,11 @@ namespace PROCEDURAL_GAME.World
         private const int OffsetRange = 1000;
 
         private readonly NoiseSettings settings;
+        // Variação de cor do chão: formas de ~8 m, bem menores que o relevo.
+        private const float DetailFrequency = 0.12f;
+
         private readonly float2[] octaveOffsets;
+        private readonly float2 detailOffset;
         private readonly float maxAmplitude;
 
         public TerrainNoise(int seed, NoiseSettings settings)
@@ -57,6 +61,17 @@ namespace PROCEDURAL_GAME.World
                 maxAmplitude += amplitude;
                 amplitude *= settings.persistence;
             }
+
+            detailOffset = new float2(random.Next(-OffsetRange, OffsetRange), random.Next(-OffsetRange, OffsetRange));
+        }
+
+        /// <summary>Altura máxima possível do relevo, em metros.</summary>
+        public float MaxHeight => settings.heightScale;
+
+        /// <summary>Ruído de detalhe entre -1 e 1, só para variar a cor do chão (não muda a forma do terreno).</summary>
+        public float GetDetail(float x, float z)
+        {
+            return noise.snoise(new float2(x, z) * DetailFrequency + detailOffset);
         }
 
         public float GetHeight(float x, float z)

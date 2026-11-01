@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 06b33ed90048a424c82be795bfb51a66, type: 3}
+  m_Name: Campo
+  m_EditorClassIdentifier: 
+  lowColor: {r: 0.17, g: 0.19, b: 0.1, a: 1}
+  grassColor: {r: 0.27, g: 0.35, b: 0.17, a: 1}
+  highColor: {r: 0.45, g: 0.45, b: 0.36, a: 1}
+  rockColor: {r: 0.34, g: 0.34, b: 0.33, a: 1}
+  lowHeightEnd: 0.3
+  highHeightStart: 0.65
+  rockSlopeStart: 0.8
+  rockSlopeFull: 0.62
+  colorVariation: 0.15
+  fogColor: {r: 0.55, g: 0.57, b: 0.6, a: 1}
+  fogDensity: 0.014
+  ambientColor: {r: 0.3, g: 0.32, b: 0.35, a: 1}
+  lightColor: {r: 0.8, g: 0.82, b: 0.85, a: 1}
+  lightIntensity: 0.8

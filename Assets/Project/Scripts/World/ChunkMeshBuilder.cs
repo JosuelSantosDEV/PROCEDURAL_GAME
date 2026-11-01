@@ -22,15 +22,22 @@ namespace PROCEDURAL_GAME.World
         private readonly int heightGridSize;
         private readonly float[] heights;
 
+        private readonly BiomeProfile biome;
+        // A cor de vértice não passa pela conversão sRGB→linear do Unity; no espaço de cor Linear fazemos nós mesmos.
+        private readonly bool convertToLinear;
+
         private readonly Vector3[] vertices;
         private readonly Vector3[] normals;
         private readonly Vector2[] uvs;
+        private readonly Color32[] colors;
         private readonly int[] triangles;
 
-        public ChunkMeshBuilder(TerrainNoise terrainNoise, float chunkSize, int resolution)
+        public ChunkMeshBuilder(TerrainNoise terrainNoise, float chunkSize, int resolution, BiomeProfile biome)
         {
             this.terrainNoise = terrainNoise;
             this.chunkSize = chunkSize;
+            this.biome = biome;
+            convertToLinear = QualitySettings.activeColorSpace == ColorSpace.Linear;
             // O índice de 16 bits do Mesh aceita até 65535 vértices: (254 + 1)² cabe.
             this.resolution = Mathf.Clamp(resolution, 2, 254);
             step = chunkSize / this.resolution;
@@ -42,6 +49,7 @@ namespace PROCEDURAL_GAME.World
             vertices = new Vector3[vertsPerSide * vertsPerSide];
             normals = new Vector3[vertices.Length];
             uvs = new Vector2[vertices.Length];
+            colors = new Color32[vertices.Length];
             triangles = BuildTriangles(this.resolution);
         }
 
@@ -75,7 +83,11 @@ namespace PROCEDURAL_GAME.World
                     float slopeZ = heights[heightIndex - heightGridSize] - heights[heightIndex + heightGridSize];
                     normals[vertexIndex] = new Vector3(slopeX, 2f * step, slopeZ).normalized;
 
-                    uvs[vertexIndex] = new Vector2((originX + x * step) / UvMetersPerTile, (originZ + z * step) / UvMetersPerTile);
+                    float worldX = originX + x * step;
+                    float worldZ = originZ + z * step;
+
+                    uvs[vertexIndex] = new Vector2(worldX / UvMetersPerTile, worldZ / UvMetersPerTile);
+                    colors[vertexIndex] = GetColor(heights[heightIndex], normals[vertexIndex].y, worldX, worldZ);
                 }
             }
 
@@ -83,8 +95,37 @@ namespace PROCEDURAL_GAME.World
             mesh.vertices = vertices;
             mesh.normals = normals;
             mesh.uv = uvs;
+            mesh.colors32 = colors;
             mesh.SetTriangles(triangles, 0, false);
             mesh.RecalculateBounds();
+        }
+
+        /// <summary>
+        /// Cor do chão num ponto: gradiente por altura (vale → chão → alto), rocha nas encostas íngremes
+        /// e uma leve variação de brilho para não ficar chapado.
+        /// </summary>
+        private Color32 GetColor(float height, float normalY, float worldX, float worldZ)
+        {
+            float maxHeight = terrainNoise.MaxHeight;
+            float heightT = maxHeight > 0f ? Mathf.Clamp01(height / maxHeight) : 0f;
+
+            Color color = Color.Lerp(biome.lowColor, biome.grassColor, Smooth(0f, biome.lowHeightEnd, heightT));
+            color = Color.Lerp(color, biome.highColor, Smooth(biome.highHeightStart, 1f, heightT));
+
+            // normalY perto de 1 = chão plano; perto de 0 = parede. Rocha = 1 quando íngreme.
+            float rock = 1f - Smooth(biome.rockSlopeFull, biome.rockSlopeStart, normalY);
+            color = Color.Lerp(color, biome.rockColor, rock);
+
+            float brightness = 1f + terrainNoise.GetDetail(worldX, worldZ) * biome.colorVariation;
+            color = new Color(color.r * brightness, color.g * brightness, color.b * brightness, 1f);
+
+            return convertToLinear ? color.linear : color;
+        }
+
+        // 0 abaixo de 'from', 1 acima de 'to', suave no meio.
+        private static float Smooth(float from, float to, float value)
+        {
+            return Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(from, to, value));
         }
 
         // A grade de triângulos é a mesma para todo chunk, então é montada uma vez só.

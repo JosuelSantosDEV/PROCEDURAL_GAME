@@ -5,6 +5,19 @@
 - Projeto novo, construído aos poucos. Os 3 scripts iniciais vieram de outro projeto ("IndustrialProject"); referências a ele devem ser removidas se aparecerem.
 - Idioma: conversa e comentários de código em **português (BR)**; nomes de classes/variáveis em inglês.
 
+## Visão do jogo (resumo de `About/Info.md`; a pasta `About/` fica fora do Unity e do Git — referências visuais de Silent Hill 2)
+- Mundo "infinito" procedural, **tom sombrio/terror**, neblina como elemento central (estilo Silent Hill). Objetivo do jogador: coletar recursos de sobrevivência e eliminar ameaças.
+- Rejogabilidade: a cada partida ambiente, inimigos e posições diferentes (seed).
+- **Biomas por direção a partir da origem** (norte/sul/leste/oeste), com transição gradual:
+  - Deserto: morros, dunas, pedras e monumentos aleatórios estilo egípcio; neblina cor de areia (vento).
+  - Floresta sombria: neblina intensa; monstros mais fortes.
+  - Campos: grama e pedras; pouca neblina.
+  - Cidade-labirinto: túneis subterrâneos (como `About/Silent Hill 04.jpg`); neblina média; monstros mais fortes.
+- Recursos e monstros distribuídos aleatoriamente em todos os biomas (determinísticos por seed + chunk); os mais fortes ficam na floresta e na cidade-labirinto.
+- Árvores/pedras: usuário vai baixar modelos low poly gratuitos da Asset Store e avisar quando estiverem no projeto.
+- **Atenção arquitetural:** terreno por heightmap (como o atual) não faz túneis/subterrâneo. A cidade-labirinto precisará de outra técnica (ex.: chunks de "interior" montados com peças modulares, ou cavidades em volume). Decidir antes de implementar esse bioma.
+- Neblina curta também ajuda o desempenho mobile (permite `View Radius` pequeno).
+
 ## Stack
 - Unity **2022.3.12f1**, URP 14.0.9, **Input System 1.7.0** (`activeInputHandler: 1` = só o novo Input System; não usar `UnityEngine.Input`).
 - Cena principal: `Assets/Scenes/GameWorld.unity` (Terrain 50x50 em (-5,0,-5), Player = cápsula em (0,1,0), Main Camera).
@@ -17,6 +30,9 @@
 - `Assets/Project/Scripts/Editor/MobileControlsBuilder.cs` — menu **PROCEDURAL_GAME > Create Mobile Controls**: (re)cria Canvas + EventSystem (InputSystemUIInputModule) e liga ao Player/câmera. Para mudar o layout da UI, edite este script e rode de novo.
 - `Assets/PinePie/Simple Joystick/` — pacote de terceiros (Asset Store). Usamos só o `JoystickController` (modo Floating) e os sprites. Alterações locais: `using UnityEditor` dentro de `#if UNITY_EDITOR` (senão quebra o build mobile) e campo novo `keepVisible` (base do joystick visível na posição inicial em Floating/Dynamic). Pasta `Examples` foi removida.
 - `Assets/Project/Scripts/World/` — terreno procedural em chunks: `WorldGenerator` (streaming ao redor do Player, pool de chunks, orçamento de ms por frame, coloca o Player no chão no Start), `ChunkMeshBuilder` (malha + normais sem costura, buffers reutilizados), `TerrainChunk` (GameObject reciclável), `TerrainNoise` (altura = função pura de seed+x+z, `Unity.Mathematics.noise.snoise`, fBm; `NoiseSettings`). Menu **PROCEDURAL_GAME > Create Procedural World** (`WorldBuilder.cs`) cria o objeto `World` + material `Assets/Project/Materials/ProceduralTerrain.mat` e desativa o Terrain antigo.
+- Visual do terreno (fase 1): sem texturas; cor por **vértice** calculada em `ChunkMeshBuilder.GetColor` (altura → gradiente low/grass/high, inclinação → rocha, ruído de detalhe → variação), convertida para linear (projeto em Linear). Shader próprio `Assets/Project/Shaders/TerrainVertexColor.shader` (URP: luz principal + sombras + ambiente + neblina; sem luzes adicionais). `BiomeProfile` (ScriptableObject, `Assets/Project/Biomes/Campo|Floresta.asset`) guarda cores do terreno + atmosfera; `AtmosphereController` aplica neblina (exp²), ambiente, luz direcional e cor do céu (= cor da neblina). Fórmula: neblina esconde 95% em ≈ 1,7/densidade metros — manter ≈ `View Radius × Chunk Size`. O `WorldBuilder` (menu Create Procedural World) é idempotente: só preenche campos vazios e **grava a atmosfera na cena** (RenderSettings). IMPORTANTE: a neblina precisa estar ativa na cena salva (Exp2); só ligar por script em runtime faz o build mobile descartar as variantes de neblina (Graphics > Fog Modes = Automatic) e a neblina some no celular. Ao trocar de bioma/modo de neblina, rodar o menu de novo e salvar a cena.
+- **Sombras dinâmicas desligadas** (decisão do usuário): ficaram quadradas no celular. Luz com `shadows = None` (`AtmosphereController.dynamicShadows`), chunks sem cast/receive, shader sem sombras. Reativar só com plano (resolução/cascatas do URP mobile, shader com ShadowCaster + CommonMaterial.hlsl).
+- Desempenho: `Scripts/Core/FrameRateController` (fixa `targetFrameRate` = 60, vSync 0, tela sempre ligada; no Android o padrão do Unity é 30 FPS) e `Scripts/Debug/FpsCounter` (FPS, ms médio e pior frame no canto superior esquerdo, via IMGUI). Ambos são adicionados ao objeto `World` pelo menu Create Procedural World. Remover/desmarcar `FpsCounter.Visible` antes de publicar.
 - Namespaces: `PROCEDURAL_GAME.Player`, `PROCEDURAL_GAME.CameraControl`, `PROCEDURAL_GAME.MobileInput`, `PROCEDURAL_GAME.World`, `PROCEDURAL_GAME.EditorTools`.
 
 ## Controles atuais (teste no PC)
@@ -42,4 +58,6 @@ Esquerda da tela: joystick flutuante (Move) · Direita: arrastar o dedo gira a c
 - [x] Controles de toque (joystick virtual, arrastar para olhar, botões Pular/Correr/Câmera) — código pronto; falta o usuário rodar o menu `Create Mobile Controls` e validar em aparelho.
 - [ ] Botão de ataque (e outros) — a adicionar depois.
 - [~] Geração procedural: v1 do terreno aberto em chunks escrita (decisão padrão: mundo aberto ao ar livre; tipo de ambiente/gênero do jogo ainda NÃO definidos pelo usuário). Falta validar no Editor e no celular (FPS, tempo de criação de chunk).
-- [ ] Próximos da geração: cor por altura/inclinação (biomas), neblina para esconder o limite de visão, objetos espalhados (árvores/pedras) determinísticos por seed, mover a criação de malha para Jobs/Burst se o celular engasgar.
+- [x] v1 do terreno testada no celular: funcionou bem.
+- [~] Fase 1 (cor + neblina + atmosfera) escrita, ainda NÃO compilada/testada (shader escrito sem poder rodar o Unity: se o terreno aparecer rosa/preto, ver erros do shader no Console).
+- [ ] Ordem planejada: (1) cor por altura/inclinação + neblina/atmosfera sombria [feita, falta validar]; (2) sistema de conteúdo por chunk (objetos determinísticos por seed, pool/GPU instancing, LOD) com formas simples, depois os modelos baixados; (3) biomas por direção (deserto/floresta/campo/cidade) controlando cor, neblina, objetos e inimigos; (4) cidade-labirinto/subterrâneo (técnica a decidir); (5) recursos e inimigos. Mover a criação de malha para Jobs/Burst só se o celular engasgar.

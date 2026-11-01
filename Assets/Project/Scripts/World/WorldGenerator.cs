@@ -42,7 +42,11 @@ namespace PROCEDURAL_GAME.World
         [Header("Relevo")]
         [SerializeField] private NoiseSettings noiseSettings = new NoiseSettings();
 
+        [Tooltip("Material com o shader PROCEDURAL_GAME/TerrainVertexColor (lê a cor calculada nos vértices).")]
         [SerializeField] private Material terrainMaterial;
+
+        [Tooltip("Cores do terreno e atmosfera (neblina, luz, céu). Troque o arquivo para comparar visuais.")]
+        [SerializeField] private BiomeProfile biome;
 
         private readonly Dictionary<Vector2Int, TerrainChunk> activeChunks = new Dictionary<Vector2Int, TerrainChunk>();
         private readonly Stack<TerrainChunk> pool = new Stack<TerrainChunk>();
@@ -56,6 +60,9 @@ namespace PROCEDURAL_GAME.World
 
         /// <summary>Seed em uso (útil para reproduzir um mundo que você gostou).</summary>
         public int Seed => seed;
+
+        /// <summary>Perfil visual em uso (cores do terreno e atmosfera).</summary>
+        public BiomeProfile Biome => biome;
 
         /// <summary>Altura do terreno em qualquer ponto do mundo, mesmo onde o chunk ainda não foi criado.</summary>
         public float GetHeight(float x, float z) => terrainNoise.GetHeight(x, z);
@@ -82,11 +89,18 @@ namespace PROCEDURAL_GAME.World
                 return;
             }
 
+            if (biome == null)
+            {
+                // Sem perfil o mundo ainda funciona, com as cores padrão do BiomeProfile.
+                Debug.LogWarning($"{nameof(WorldGenerator)}: 'Biome' não foi atribuído; usando cores padrão. Rode PROCEDURAL_GAME > Create Procedural World.", this);
+                biome = ScriptableObject.CreateInstance<BiomeProfile>();
+            }
+
             if (randomSeed) seed = Random.Range(int.MinValue, int.MaxValue);
             Debug.Log($"Mundo gerado com a seed {seed}.");
 
             terrainNoise = new TerrainNoise(seed, noiseSettings);
-            meshBuilder = new ChunkMeshBuilder(terrainNoise, chunkSize, resolution);
+            meshBuilder = new ChunkMeshBuilder(terrainNoise, chunkSize, resolution, biome);
         }
 
         private void Start()
