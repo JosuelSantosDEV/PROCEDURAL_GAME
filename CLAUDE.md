@@ -16,7 +16,8 @@
 - `Assets/Project/Scripts/MobileInput/` — controles de toque: `MobileControls` (agrega tudo, fica no Canvas), `TouchButton`, `TouchLookArea` (arrastar para olhar). O `PlayerInputReader` lê daqui (campo `Mobile Controls`) junto com teclado/gamepad.
 - `Assets/Project/Scripts/Editor/MobileControlsBuilder.cs` — menu **PROCEDURAL_GAME > Create Mobile Controls**: (re)cria Canvas + EventSystem (InputSystemUIInputModule) e liga ao Player/câmera. Para mudar o layout da UI, edite este script e rode de novo.
 - `Assets/PinePie/Simple Joystick/` — pacote de terceiros (Asset Store). Usamos só o `JoystickController` (modo Floating) e os sprites. Alterações locais: `using UnityEditor` dentro de `#if UNITY_EDITOR` (senão quebra o build mobile) e campo novo `keepVisible` (base do joystick visível na posição inicial em Floating/Dynamic). Pasta `Examples` foi removida.
-- Namespaces: `PROCEDURAL_GAME.Player`, `PROCEDURAL_GAME.CameraControl`, `PROCEDURAL_GAME.MobileInput`, `PROCEDURAL_GAME.EditorTools`.
+- `Assets/Project/Scripts/World/` — terreno procedural em chunks: `WorldGenerator` (streaming ao redor do Player, pool de chunks, orçamento de ms por frame, coloca o Player no chão no Start), `ChunkMeshBuilder` (malha + normais sem costura, buffers reutilizados), `TerrainChunk` (GameObject reciclável), `TerrainNoise` (altura = função pura de seed+x+z, `Unity.Mathematics.noise.snoise`, fBm; `NoiseSettings`). Menu **PROCEDURAL_GAME > Create Procedural World** (`WorldBuilder.cs`) cria o objeto `World` + material `Assets/Project/Materials/ProceduralTerrain.mat` e desativa o Terrain antigo.
+- Namespaces: `PROCEDURAL_GAME.Player`, `PROCEDURAL_GAME.CameraControl`, `PROCEDURAL_GAME.MobileInput`, `PROCEDURAL_GAME.World`, `PROCEDURAL_GAME.EditorTools`.
 
 ## Controles atuais (teste no PC)
 WASD mover · Mouse olhar · Espaço pular · Shift correr · **V** alternar 1ª/3ª pessoa · Esc libera o cursor (clique devolve).
@@ -40,4 +41,5 @@ Esquerda da tela: joystick flutuante (Move) · Direita: arrastar o dedo gira a c
 - [x] Scripts corrigidos, Input Actions criado, componentes ligados na cena (mover, pular, alternar câmera).
 - [x] Controles de toque (joystick virtual, arrastar para olhar, botões Pular/Correr/Câmera) — código pronto; falta o usuário rodar o menu `Create Mobile Controls` e validar em aparelho.
 - [ ] Botão de ataque (e outros) — a adicionar depois.
-- [ ] Geração procedural de ambiente — ainda não iniciada.
+- [~] Geração procedural: v1 do terreno aberto em chunks escrita (decisão padrão: mundo aberto ao ar livre; tipo de ambiente/gênero do jogo ainda NÃO definidos pelo usuário). Falta validar no Editor e no celular (FPS, tempo de criação de chunk).
+- [ ] Próximos da geração: cor por altura/inclinação (biomas), neblina para esconder o limite de visão, objetos espalhados (árvores/pedras) determinísticos por seed, mover a criação de malha para Jobs/Burst se o celular engasgar.
