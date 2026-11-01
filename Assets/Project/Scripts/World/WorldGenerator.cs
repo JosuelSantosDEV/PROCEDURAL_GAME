@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
+using PROCEDURAL_GAME.Core;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
@@ -48,6 +49,13 @@ namespace PROCEDURAL_GAME.World
         [Tooltip("Cores do terreno e atmosfera (neblina, luz, céu). Troque o arquivo para comparar visuais.")]
         [SerializeField] private BiomeProfile biome;
 
+        [Header("Objetos")]
+        [Tooltip("Raio, em metros, ao redor do ponto (0, 0) sem objetos. Evita o Player começar dentro de uma árvore.")]
+        [SerializeField, Min(0f)] private float spawnClearRadius = 6f;
+
+        [Tooltip("Só os chunks até essa distância (em chunks) têm colisão nos objetos. 2 = o chunk do Player e mais 2 ao redor.")]
+        [SerializeField, Range(0, 6)] private int collisionRadius = 2;
+
         private readonly Dictionary<Vector2Int, TerrainChunk> activeChunks = new Dictionary<Vector2Int, TerrainChunk>();
         private readonly Stack<TerrainChunk> pool = new Stack<TerrainChunk>();
         private readonly List<Vector2Int> pending = new List<Vector2Int>();
@@ -55,6 +63,7 @@ namespace PROCEDURAL_GAME.World
 
         private TerrainNoise terrainNoise;
         private ChunkMeshBuilder meshBuilder;
+        private ScatterSpawner scatter;
         private Vector2Int lastCenter;
         private bool hasCenter;
 
@@ -63,6 +72,9 @@ namespace PROCEDURAL_GAME.World
 
         /// <summary>Perfil visual em uso (cores do terreno e atmosfera).</summary>
         public BiomeProfile Biome => biome;
+
+        /// <summary>Raio de carregamento efetivo, em chunks: o do bioma, se ele definir um, senão o do World.</summary>
+        private int ViewRadius => biome != null && biome.viewRadius > 0 ? biome.viewRadius : viewRadius;
 
         /// <summary>Altura do terreno em qualquer ponto do mundo, mesmo onde o chunk ainda não foi criado.</summary>
         public float GetHeight(float x, float z) => terrainNoise.GetHeight(x, z);
@@ -89,6 +101,9 @@ namespace PROCEDURAL_GAME.World
                 return;
             }
 
+            // Bioma escolhido no menu inicial tem prioridade sobre o configurado na cena.
+            if (GameSession.SelectedBiome != null) biome = GameSession.SelectedBiome;
+
             if (biome == null)
             {
                 // Sem perfil o mundo ainda funciona, com as cores padrão do BiomeProfile.
@@ -101,6 +116,11 @@ namespace PROCEDURAL_GAME.World
 
             terrainNoise = new TerrainNoise(seed, noiseSettings);
             meshBuilder = new ChunkMeshBuilder(terrainNoise, chunkSize, resolution, biome);
+
+            if (biome.scatter != null && biome.scatter.Length > 0)
+            {
+                scatter = new ScatterSpawner(transform, new ChunkScatter(terrainNoise, seed, chunkSize, spawnClearRadius), biome.scatter);
+            }
         }
 
         private void Start()
@@ -175,7 +195,8 @@ namespace PROCEDURAL_GAME.World
         {
             // Descarta com uma folga de 1 chunk além do raio de carregamento. Sem isso, andar na divisa
             // criaria e apagaria o mesmo chunk toda hora.
-            int releaseRadius = viewRadius + 1;
+            int radius = ViewRadius;
+            int releaseRadius = radius + 1;
             toRelease.Clear();
             foreach (KeyValuePair<Vector2Int, TerrainChunk> pair in activeChunks)
             {
@@ -191,11 +212,11 @@ namespace PROCEDURAL_GAME.World
             }
 
             pending.Clear();
-            for (int dz = -viewRadius; dz <= viewRadius; dz++)
+            for (int dz = -radius; dz <= radius; dz++)
             {
-                for (int dx = -viewRadius; dx <= viewRadius; dx++)
+                for (int dx = -radius; dx <= radius; dx++)
                 {
-                    if (dx * dx + dz * dz > viewRadius * viewRadius) continue;
+                    if (dx * dx + dz * dz > radius * radius) continue;
 
                     Vector2Int coord = new Vector2Int(center.x + dx, center.y + dz);
                     if (!activeChunks.ContainsKey(coord)) pending.Add(coord);
@@ -204,6 +225,16 @@ namespace PROCEDURAL_GAME.World
 
             // Ordem decrescente de distância: assim tiramos sempre do fim da lista (barato) e o mais perto sai primeiro.
             pending.Sort((a, b) => SqrDistance(b, center).CompareTo(SqrDistance(a, center)));
+
+            foreach (KeyValuePair<Vector2Int, TerrainChunk> pair in activeChunks)
+            {
+                pair.Value.SetScatterCollisions(IsNearForCollision(pair.Key, center));
+            }
+        }
+
+        private bool IsNearForCollision(Vector2Int coord, Vector2Int center)
+        {
+            return SqrDistance(coord, center) <= collisionRadius * collisionRadius;
         }
 
         private void BuildPendingChunks()
@@ -230,7 +261,8 @@ namespace PROCEDURAL_GAME.World
             if (activeChunks.ContainsKey(coord)) return;
 
             TerrainChunk chunk = pool.Count > 0 ? pool.Pop() : new TerrainChunk(transform, terrainMaterial);
-            chunk.Show(coord, new Vector3(coord.x * chunkSize, 0f, coord.y * chunkSize), meshBuilder);
+            chunk.Show(coord, new Vector3(coord.x * chunkSize, 0f, coord.y * chunkSize), meshBuilder, scatter);
+            chunk.SetScatterCollisions(IsNearForCollision(coord, WorldToChunk(target.position)));
             activeChunks.Add(coord, chunk);
         }
 

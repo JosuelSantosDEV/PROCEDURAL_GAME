@@ -1,0 +1,78 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5f2710e03e9c872408b42f6176877f10, type: 3}
+  m_Name: ArvoresMobile
+  m_EditorClassIdentifier: 
+  prefabs:
+  - {fileID: 2305000110707992399, guid: 7fed74563a868754791b2b59a5b5d431, type: 3}
+  - {fileID: 8301515439290927329, guid: f9aa04b46dcf88a4ba04231304df1792, type: 3}
+  - {fileID: 2950439035895575615, guid: 799d845134124d04683fca945f0d0980, type: 3}
+  - {fileID: 4745507022502446170, guid: 24f4be8d631c2c147a6c73697fa766f3, type: 3}
+  - {fileID: 6012645543989609733, guid: 047f327e91c952d4aa83761a0e313302, type: 3}
+  - {fileID: 4548824063991107746, guid: a75a073f62df7e74ca9bdb7c29c5d24e, type: 3}
+  - {fileID: 8644694268881295235, guid: c352d4cb890ee674ab2d05f6d11ad00b, type: 3}
+  - {fileID: 3424450671555818402, guid: f8cc1f09fcfa25342bbb6f812209d7b7, type: 3}
+  - {fileID: 7189926943928029272, guid: 38cc37925caf4d54eb172c68dd7114f6, type: 3}
+  - {fileID: 2085154477279628204, guid: 24609e7889ee98b4f882dd662ec8040d, type: 3}
+  - {fileID: 1689178081278817674, guid: 57735fb208154d746a740192357c5fbb, type: 3}
+  - {fileID: 9118535108632722088, guid: bc8ca2f849dc68a44a8c37fb84564bc8, type: 3}
+  - {fileID: 7908963651354416109, guid: 15efa7f74bc9b2d49b0ff982be975e35, type: 3}
+  - {fileID: 8996647119961517785, guid: 0c98a1a04ddaa144c813152b2cee35cc, type: 3}
+  - {fileID: 5339936558882397716, guid: 37335e4443b980a4296b2a8b71db2462, type: 3}
+  - {fileID: 7614595184431236036, guid: ee187b0191506bd499d72e59b65ad2c9, type: 3}
+  - {fileID: 8425062175627258300, guid: fd7dda377534cc340937e61a19c35cd7, type: 3}
+  - {fileID: 3448590478100863996, guid: f21bed309ec18e942a329bc234de8827, type: 3}
+  - {fileID: 2637131497344719638, guid: aeb9677bdd54cde4398afbdd99cc7276, type: 3}
+  - {fileID: 3643843836008492306, guid: 3589874a4e5c70e4bb3377e0ff73aed0, type: 3}
+  - {fileID: 1131824747501265131, guid: e14d1242cb2f5804285b8608a17515a6, type: 3}
+  - {fileID: 6471620071981783216, guid: 902f56342c6e79343b498d40ed567824, type: 3}
+  - {fileID: 3069143698340948297, guid: 37e604c6d0ff80d4aa741d109b40fa03, type: 3}
+  - {fileID: 6971373105492309386, guid: 3b29332f905941e4c97838b6caf9b733, type: 3}
+  - {fileID: 5760882261068689599, guid: 15fe503ef27e0204ca2f689c5d8b930e, type: 3}
+  - {fileID: 3084800685635330159, guid: 2256fe35b81c09848bd783884698c0b4, type: 3}
+  - {fileID: 6727001334799726239, guid: aca5e2a213410ef4ea4a3e42521e5860, type: 3}
+  - {fileID: 2427696799562868962, guid: 7255acaa79af0a14aa0a496ddc16ae9c, type: 3}
+  - {fileID: 8152069723474585060, guid: aedb3610904366344a70f6284d0d792d, type: 3}
+  - {fileID: 8952438521861425188, guid: 5002c9ef9b59f874d98f2e4b4b2382bd, type: 3}
+  - {fileID: 8683824115384374818, guid: 3d885ecf5103e474082138c896a3408a, type: 3}
+  - {fileID: 7085543043887052858, guid: 9a2d8ba5ab2303242ad05ee330675a3d, type: 3}
+  - {fileID: 4201764567100300312, guid: d1ae2da8bc4c2c04292bb76d2e4a7e93, type: 3}
+  - {fileID: 3895456328033410288, guid: 8e5ea7aedc51bad43b396761cb291bba, type: 3}
+  - {fileID: 6151309029690637417, guid: 9801c386aca76944f818dda636e8644a, type: 3}
+  - {fileID: 6619639050752236051, guid: 9c31471d0b7543b4381045182a77c081, type: 3}
+  - {fileID: 8458674270045769824, guid: 852421fd7d600944e8020c476371293e, type: 3}
+  - {fileID: 7393963053330577820, guid: 64a295aa7ace8f24b8bb5098d7a46f08, type: 3}
+  - {fileID: 1618093650661053632, guid: b68b25bb75f9f6145b10130943fc3bd2, type: 3}
+  - {fileID: 1705687853902686956, guid: aaf39484df4f71d40867c77a0c0c026b, type: 3}
+  - {fileID: 3252179671696944911, guid: abc3f8a620fde2d4d930ae2cdbca04cc, type: 3}
+  - {fileID: 3355841467743534015, guid: b875ee8de7a804844beba3fc86558641, type: 3}
+  - {fileID: 6522142880712097596, guid: b09b4ef1a8d1cab4fbbe88cfcb4753d0, type: 3}
+  - {fileID: 3126418148805503736, guid: 893c6f38e4b7d6d4586141035e36b91f, type: 3}
+  - {fileID: 3769691058968610357, guid: 6a02294d02c1dee4cb5f08dd251d63df, type: 3}
+  - {fileID: 8033109641178071077, guid: cf9f64b2f2489434e844f231b14eca54, type: 3}
+  - {fileID: 2736597848702171867, guid: 77c10c354aef1c041bca330e008833f1, type: 3}
+  - {fileID: 1024962308694807879, guid: c3acf9952bc6ee24c9ce2c7b7b3f737c, type: 3}
+  salt: 17
+  category: "\xC1rvores"
+  attemptsPerChunk: 9
+  minSpacing: 3.5
+  clustering: 0.25
+  clusterSize: 70
+  maxSlope: 28
+  minHeight: 0
+  maxHeight: 1
+  minScale: 0.9
+  maxScale: 1.5
+  alignToSurface: 0
+  sinkDepth: 0.1
+  collision: 1
+  trunkRadius: 0.3

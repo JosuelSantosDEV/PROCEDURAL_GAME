@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5f2710e03e9c872408b42f6176877f10, type: 3}
+  m_Name: ArvoresSecas
+  m_EditorClassIdentifier: 
+  prefabs:
+  - {fileID: 6013024405325220409, guid: 9046dd8040214c0458728201d824c41f, type: 3}
+  - {fileID: 1595839177971253161, guid: f2e54234007ec4543b62fd7788bcd725, type: 3}
+  - {fileID: 2836331978891831245, guid: 5fbfb820b09a96f47a16dc79c8539ec7, type: 3}
+  - {fileID: 5474788506171312319, guid: 8ea6769c115c9f841a7df2e330403985, type: 3}
+  - {fileID: 230006360637513423, guid: 6905bfb07dfcac5489e6daf8e7babe92, type: 3}
+  - {fileID: 8004922568447459907, guid: 0603828da9221ca4a9a54954ff8842ff, type: 3}
+  - {fileID: 5605882136043868659, guid: 10d8dedacc7c7804ea3893a4d74faea1, type: 3}
+  salt: 11
+  category: "\xC1rvores"
+  attemptsPerChunk: 14
+  minSpacing: 6
+  clustering: 0.6
+  clusterSize: 60
+  maxSlope: 30
+  minHeight: 0
+  maxHeight: 1
+  minScale: 0.8
+  maxScale: 1.3
+  alignToSurface: 0
+  sinkDepth: 0.1
+  collision: 1
+  trunkRadius: 0.4

@@ -1,3 +1,4 @@
+using PROCEDURAL_GAME.Core;
 using UnityEngine;
 
 namespace PROCEDURAL_GAME.DebugTools
@@ -19,6 +20,12 @@ namespace PROCEDURAL_GAME.DebugTools
         private float worstFrame;
         private string label = "...";
         private GUIStyle style;
+
+        private void Awake()
+        {
+            // A escolha do jogador no menu de Desempenho vale mais que o valor marcado na cena.
+            visible = PerformanceSettings.GetShowFpsCounter(visible);
+        }
 
         private void Update()
         {

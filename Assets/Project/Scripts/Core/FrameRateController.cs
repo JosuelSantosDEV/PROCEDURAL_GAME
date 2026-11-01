@@ -21,8 +21,11 @@ namespace PROCEDURAL_GAME.Core
             // O Unity ignora Application.targetFrameRate quando o VSync está ligado.
             QualitySettings.vSyncCount = 0;
 
-            Application.targetFrameRate = targetFrameRate > 0
-                ? targetFrameRate
+            // A escolha do jogador no menu de Desempenho vale mais que o valor configurado na cena.
+            int fps = PerformanceSettings.GetTargetFps(targetFrameRate);
+
+            Application.targetFrameRate = fps > 0
+                ? fps
                 : Mathf.RoundToInt((float)Screen.currentResolution.refreshRateRatio.value);
 
             if (keepScreenOn) Screen.sleepTimeout = SleepTimeout.NeverSleep;

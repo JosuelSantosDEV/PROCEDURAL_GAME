@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5f2710e03e9c872408b42f6176877f10, type: 3}
+  m_Name: Arbustos
+  m_EditorClassIdentifier: 
+  prefabs:
+  - {fileID: 5934389985674958905, guid: 6ca98138a24dcba4794240a2ce655de0, type: 3}
+  - {fileID: 6823157465808746501, guid: 78896d177412fda41b9bc612821c96f6, type: 3}
+  - {fileID: 6093055965503814416, guid: a342d9aa884f84a448e16bc40d5562c3, type: 3}
+  - {fileID: 4281376846882751550, guid: 3fcfa49b8c8a7ef4b9d7d4f6b542f34c, type: 3}
+  - {fileID: 1992134791771612835, guid: 8c1d63f76521abd48a9adcd854bcf2d0, type: 3}
+  - {fileID: 9085843454159422071, guid: 6ba9c39a65d24c347aa03c168bd96c11, type: 3}
+  - {fileID: 403936280186497736, guid: bb389b07bc521e34b9d34abdfc497fca, type: 3}
+  - {fileID: 8155575194279524966, guid: 1096640bd6be25e41b34f3949e3b10da, type: 3}
+  - {fileID: 1480004576672099667, guid: 43d006e54c14e80489a09fefb2d49847, type: 3}
+  - {fileID: 1462214739734241635, guid: 4de24f7d7c636c342a8db42c73159892, type: 3}
+  - {fileID: 5941938710848808109, guid: f66251e2e99419244a3e72f341b50beb, type: 3}
+  - {fileID: 8495748984823069617, guid: 3165a04d38b8a3d4fb27f4f1bbe99a92, type: 3}
+  - {fileID: 5414391826843963202, guid: 2fd6f16ed3833394e90bebae04541a2e, type: 3}
+  salt: 31
+  category: Arbustos
+  attemptsPerChunk: 20
+  minSpacing: 1.5
+  clustering: 0.5
+  clusterSize: 25
+  maxSlope: 40
+  minHeight: 0
+  maxHeight: 1
+  minScale: 0.8
+  maxScale: 1.5
+  alignToSurface: 0
+  sinkDepth: 0.05
+  collision: 0
+  trunkRadius: 0.35

@@ -11,6 +11,16 @@ namespace PROCEDURAL_GAME.World
     [CreateAssetMenu(menuName = "PROCEDURAL_GAME/Biome Profile", fileName = "NewBiomeProfile")]
     public class BiomeProfile : ScriptableObject
     {
+        [Header("Menu")]
+        [Tooltip("Nome mostrado no menu inicial. Vazio = nome do arquivo.")]
+        public string displayName = "";
+
+        [Tooltip("Frase curta mostrada no menu abaixo do nome.")]
+        [TextArea(1, 3)] public string description = "";
+
+        /// <summary>Nome para mostrar ao jogador.</summary>
+        public string DisplayName => string.IsNullOrEmpty(displayName) ? name : displayName;
+
         [Header("Terreno: cores")]
         [Tooltip("Partes baixas do relevo (vales): lama, terra úmida.")]
         public Color lowColor = new Color(0.17f, 0.19f, 0.10f);
@@ -54,5 +64,13 @@ namespace PROCEDURAL_GAME.World
         public Color lightColor = new Color(0.80f, 0.82f, 0.85f);
 
         [Min(0f)] public float lightIntensity = 0.8f;
+
+        [Header("Distância de visão")]
+        [Tooltip("Raio de carregamento desse bioma, em chunks. 0 = usa o 'View Radius' do World. Biomas fechados (floresta) podem usar menos, com neblina mais densa, e carregam bem menos objetos. Lido uma vez, ao dar Play. Mantenha a neblina ≈ Raio × Chunk Size.")]
+        [Range(0, 12)] public int viewRadius = 0;
+
+        [Header("Objetos")]
+        [Tooltip("O que nasce nesse bioma (árvores, pedras...). Cada item é um Scatter Profile. Lido uma vez, ao dar Play.")]
+        public ScatterProfile[] scatter;
     }
 }

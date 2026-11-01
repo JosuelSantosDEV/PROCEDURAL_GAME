@@ -12,6 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 06b33ed90048a424c82be795bfb51a66, type: 3}
   m_Name: Campo
   m_EditorClassIdentifier: 
+  displayName: Campo
+  description: "Campo aberto, com pouca neblina. S\xF3 rochas."
   lowColor: {r: 0.17, g: 0.19, b: 0.1, a: 1}
   grassColor: {r: 0.27, g: 0.35, b: 0.17, a: 1}
   highColor: {r: 0.45, g: 0.45, b: 0.36, a: 1}
@@ -26,3 +28,6 @@ MonoBehaviour:
   ambientColor: {r: 0.3, g: 0.32, b: 0.35, a: 1}
   lightColor: {r: 0.8, g: 0.82, b: 0.85, a: 1}
   lightIntensity: 0.8
+  viewRadius: 0
+  scatter:
+  - {fileID: 11400000, guid: 8fbc2646e6823c6448c0ed0c72388aa1, type: 2}

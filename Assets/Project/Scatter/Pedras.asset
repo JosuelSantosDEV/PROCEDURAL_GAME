@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5f2710e03e9c872408b42f6176877f10, type: 3}
+  m_Name: Pedras
+  m_EditorClassIdentifier: 
+  prefabs:
+  - {fileID: 8025208051326342902, guid: 1472b24bc247bbf419e0a50a802da085, type: 3}
+  - {fileID: 804577501927150747, guid: e96725bcafcd633479627ffe629d4b1d, type: 3}
+  - {fileID: 2163856231507138439, guid: 494cecf71362af64f9f6dd8b657c619c, type: 3}
+  - {fileID: 2245152065503751760, guid: 4d95095eafec7b74ebbd938669290339, type: 3}
+  - {fileID: 178657432713521969, guid: d98691ffb222c8c4589647df8bad2163, type: 3}
+  - {fileID: 5121512815615499271, guid: 9ddda69a3c0cb144cab3ae45534f3ac4, type: 3}
+  salt: 23
+  category: Rochas
+  attemptsPerChunk: 8
+  minSpacing: 3
+  clustering: 0.4
+  clusterSize: 45
+  maxSlope: 50
+  minHeight: 0
+  maxHeight: 1
+  minScale: 0.8
+  maxScale: 1.6
+  alignToSurface: 0.6
+  sinkDepth: 0.15
+  collision: 2
+  trunkRadius: 0.35

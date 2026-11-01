@@ -1,5 +1,6 @@
 using PROCEDURAL_GAME.Core;
 using PROCEDURAL_GAME.DebugTools;
+using PROCEDURAL_GAME.UI;
 using PROCEDURAL_GAME.World;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -13,6 +14,7 @@ namespace PROCEDURAL_GAME.EditorTools
     /// - objeto "World" com <see cref="WorldGenerator"/> e <see cref="AtmosphereController"/>;
     /// - material do terreno (shader de cor de vértice);
     /// - perfis de bioma de exemplo (Campo e Floresta) em Assets/Project/Biomes;
+    /// - perfis de objetos (árvores, pedras) em Assets/Project/Scatter, ligados aos biomas (<see cref="ScatterBuilder"/>);
     /// - desativa o Terrain antigo, que ficaria sobreposto aos chunks.
     /// </summary>
     public static class WorldBuilder
@@ -30,7 +32,17 @@ namespace PROCEDURAL_GAME.EditorTools
             if (material == null) return;
 
             BiomeProfile meadow = GetOrCreateBiome("Campo", ConfigureMeadow);
-            BiomeProfile forest = GetOrCreateBiome("Floresta", ConfigureForest);
+
+            // A antiga "Floresta" (árvores secas) virou Floresta_02. Renomear mantém o GUID, então a cena continua apontando para ela.
+            RenameBiomeIfNeeded("Floresta", "Floresta_02");
+            BiomeProfile forest01 = GetOrCreateBiome("Floresta_01", ConfigureForest01);
+            MigrateForest01(forest01);
+            BiomeProfile forest02 = GetOrCreateBiome("Floresta_02", ConfigureForest02);
+            ScatterBuilder.EnsureDefaults(meadow, forest01, forest02);
+
+            SetMenuTexts(meadow, "Campo", "Campo aberto, com pouca neblina. Só rochas.");
+            SetMenuTexts(forest01, "Floresta 01", "Mata fechada e viva: árvores variadas e arbustos.");
+            SetMenuTexts(forest02, "Floresta 02", "Floresta sombria de árvores secas e rochas.");
 
             WorldGenerator generator = Object.FindObjectOfType<WorldGenerator>();
             if (generator == null)
@@ -44,11 +56,12 @@ namespace PROCEDURAL_GAME.EditorTools
             if (world.GetComponent<AtmosphereController>() == null) Undo.AddComponent<AtmosphereController>(world);
             if (world.GetComponent<FrameRateController>() == null) Undo.AddComponent<FrameRateController>(world);
             if (world.GetComponent<FpsCounter>() == null) Undo.AddComponent<FpsCounter>(world);
+            if (world.GetComponent<InGameMenu>() == null) Undo.AddComponent<InGameMenu>(world);
 
             // Só preenche campos vazios: se você já trocou o perfil ou o material no Inspector, isso é mantido.
             SerializedObject serialized = new SerializedObject(generator);
             AssignIfEmpty(serialized, "terrainMaterial", material);
-            AssignIfEmpty(serialized, "biome", forest != null ? forest : meadow);
+            AssignIfEmpty(serialized, "biome", forest01 != null ? forest01 : meadow);
             serialized.ApplyModifiedPropertiesWithoutUndo();
 
             // Grava neblina, ambiente, luz e céu na própria cena. Isso é essencial para o build: com a neblina
@@ -66,7 +79,7 @@ namespace PROCEDURAL_GAME.EditorTools
 
             EditorSceneManager.MarkSceneDirty(world.scene);
             Selection.activeGameObject = world;
-            Debug.Log("Mundo procedural pronto. Salve a cena (Ctrl+S) e dê Play. Para comparar visuais, troque o campo 'Biome' do objeto World entre Campo e Floresta.");
+            Debug.Log("Mundo procedural pronto. Salve a cena (Ctrl+S) e dê Play. Para comparar visuais, troque o campo 'Biome' do objeto World entre Campo, Floresta_01 e Floresta_02 e rode este menu de novo para gravar a neblina do bioma na cena.");
         }
 
         private static void AssignIfEmpty(SerializedObject serialized, string propertyName, Object value)
@@ -102,6 +115,28 @@ namespace PROCEDURAL_GAME.EditorTools
             return material;
         }
 
+        // Nome e frase do menu inicial. Só preenche se vazio: o que você escreveu no asset é mantido.
+        private static void SetMenuTexts(BiomeProfile biome, string displayName, string description)
+        {
+            if (biome == null || !string.IsNullOrEmpty(biome.displayName)) return;
+
+            biome.displayName = displayName;
+            biome.description = description;
+            EditorUtility.SetDirty(biome);
+            AssetDatabase.SaveAssets();
+        }
+
+        private static void RenameBiomeIfNeeded(string oldName, string newName)
+        {
+            string oldPath = $"{BiomeFolder}/{oldName}.asset";
+            if (AssetDatabase.LoadAssetAtPath<BiomeProfile>(oldPath) == null) return;
+            if (AssetDatabase.LoadAssetAtPath<BiomeProfile>($"{BiomeFolder}/{newName}.asset") != null) return;
+
+            // RenameAsset devolve o texto do erro (vazio se deu certo).
+            string error = AssetDatabase.RenameAsset(oldPath, newName);
+            if (!string.IsNullOrEmpty(error)) Debug.LogError($"Não consegui renomear o bioma '{oldName}' para '{newName}': {error}");
+        }
+
         private static BiomeProfile GetOrCreateBiome(string biomeName, System.Action<BiomeProfile> configure)
         {
             string path = $"{BiomeFolder}/{biomeName}.asset";
@@ -130,8 +165,36 @@ namespace PROCEDURAL_GAME.EditorTools
             biome.lightIntensity = 0.8f;
         }
 
-        // Floresta sombria: chão escuro, neblina densa e esverdeada, pouca luz.
-        private static void ConfigureForest(BiomeProfile biome)
+        // Floresta_01: mata viva e variada; mais verde e fechada que o campo, mas ainda clara perto da Floresta_02.
+        private static void ConfigureForest01(BiomeProfile biome)
+        {
+            biome.lowColor = new Color(0.10f, 0.14f, 0.07f);
+            biome.grassColor = new Color(0.18f, 0.27f, 0.12f);
+            biome.highColor = new Color(0.30f, 0.32f, 0.22f);
+            biome.rockColor = new Color(0.28f, 0.28f, 0.27f);
+            biome.fogColor = new Color(0.40f, 0.46f, 0.44f);
+            // Mata fechada: enxerga ~70 m (3 chunks de raio), então carrega bem menos árvores que o campo aberto.
+            biome.viewRadius = 3;
+            biome.fogDensity = 0.024f;
+            biome.ambientColor = new Color(0.22f, 0.26f, 0.26f);
+            biome.lightColor = new Color(0.70f, 0.76f, 0.80f);
+            biome.lightIntensity = 0.65f;
+        }
+
+        // A Floresta_01 criada antes tinha neblina 0,020 e usava o raio do World. Só atualiza se ainda estiver assim
+        // (ou seja, se você não mexeu); um valor ajustado por você é mantido.
+        private static void MigrateForest01(BiomeProfile biome)
+        {
+            if (biome == null || biome.viewRadius != 0 || !Mathf.Approximately(biome.fogDensity, 0.020f)) return;
+
+            biome.viewRadius = 3;
+            biome.fogDensity = 0.024f;
+            EditorUtility.SetDirty(biome);
+            AssetDatabase.SaveAssets();
+        }
+
+        // Floresta_02 (antiga Floresta): árvores secas, chão escuro, neblina densa e esverdeada, pouca luz.
+        private static void ConfigureForest02(BiomeProfile biome)
         {
             biome.lowColor = new Color(0.07f, 0.08f, 0.05f);
             biome.grassColor = new Color(0.12f, 0.16f, 0.08f);

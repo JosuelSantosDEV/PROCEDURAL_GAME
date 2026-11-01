@@ -43,6 +43,7 @@ namespace PROCEDURAL_GAME.World
 
         private readonly float2[] octaveOffsets;
         private readonly float2 detailOffset;
+        private readonly float2 clusterOffset;
         private readonly float maxAmplitude;
 
         public TerrainNoise(int seed, NoiseSettings settings)
@@ -63,6 +64,9 @@ namespace PROCEDURAL_GAME.World
             }
 
             detailOffset = new float2(random.Next(-OffsetRange, OffsetRange), random.Next(-OffsetRange, OffsetRange));
+
+            // Sorteado por último: acrescentar sorteios aqui não muda o relevo nem o detalhe de seeds já conhecidas.
+            clusterOffset = new float2(random.Next(-OffsetRange, OffsetRange), random.Next(-OffsetRange, OffsetRange));
         }
 
         /// <summary>Altura máxima possível do relevo, em metros.</summary>
@@ -72,6 +76,15 @@ namespace PROCEDURAL_GAME.World
         public float GetDetail(float x, float z)
         {
             return noise.snoise(new float2(x, z) * DetailFrequency + detailOffset);
+        }
+
+        /// <summary>
+        /// Ruído de baixa frequência (-1 a 1) que decide onde os objetos se agrupam (bosques, pedreiras).
+        /// O <paramref name="salt"/> do perfil desloca o ruído, para árvores e pedras formarem manchas diferentes.
+        /// </summary>
+        public float GetCluster(float x, float z, float frequency, int salt)
+        {
+            return noise.snoise(new float2(x, z) * frequency + clusterOffset + new float2(salt * 53.7f, salt * 91.3f));
         }
 
         public float GetHeight(float x, float z)

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace PROCEDURAL_GAME.World
@@ -12,6 +13,10 @@ namespace PROCEDURAL_GAME.World
         private readonly GameObject gameObject;
         private readonly Mesh mesh;
         private readonly MeshCollider meshCollider;
+        private readonly List<ScatterInstance> scatterInstances = new List<ScatterInstance>();
+
+        private ScatterSpawner scatter;
+        private bool scatterCollisionsOn;
 
         public Vector2Int Coord { get; private set; }
 
@@ -35,7 +40,8 @@ namespace PROCEDURAL_GAME.World
             gameObject.SetActive(false);
         }
 
-        public void Show(Vector2Int coord, Vector3 worldPosition, ChunkMeshBuilder builder)
+        /// <param name="scatterSpawner">Cria árvores, pedras etc. sobre o chunk. Pode ser nulo (chunk só com terreno).</param>
+        public void Show(Vector2Int coord, Vector3 worldPosition, ChunkMeshBuilder builder, ScatterSpawner scatterSpawner = null)
         {
             Coord = coord;
             gameObject.transform.position = worldPosition;
@@ -49,9 +55,26 @@ namespace PROCEDURAL_GAME.World
             // Atribuir de novo (null e depois a malha) força o Unity a recalcular a colisão com a malha nova.
             meshCollider.sharedMesh = null;
             meshCollider.sharedMesh = mesh;
+
+            scatter = scatterSpawner;
+            scatterCollisionsOn = false;
+            if (scatter != null) scatter.Populate(coord, scatterInstances);
         }
 
-        public void Hide() => gameObject.SetActive(false);
+        /// <summary>Liga ou desliga os colisores dos objetos do chunk (só os chunks perto do Player precisam).</summary>
+        public void SetScatterCollisions(bool enabled)
+        {
+            if (scatterCollisionsOn == enabled) return;
+            scatterCollisionsOn = enabled;
+
+            foreach (ScatterInstance instance in scatterInstances) instance.SetCollisionEnabled(enabled);
+        }
+
+        public void Hide()
+        {
+            gameObject.SetActive(false);
+            if (scatter != null) scatter.Release(scatterInstances);
+        }
 
         /// <summary>A Mesh é um recurso próprio; sem destruir, ela vaza memória quando o mundo é descartado.</summary>
         public void Dispose()

@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0.18028378, g: 0.22571412, b: 0.30692285, a: 1}
+  m_IndirectSpecularColor: {r: 0, g: 0, b: 0, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -1772,6 +1772,7 @@ GameObject:
   - component: {fileID: 1959282502}
   - component: {fileID: 1959282504}
   - component: {fileID: 1959282503}
+  - component: {fileID: 1959282505}
   m_Layer: 0
   m_Name: World
   m_TagString: Untagged
@@ -1831,6 +1832,8 @@ MonoBehaviour:
       m_RotationOrder: 4
   terrainMaterial: {fileID: 2100000, guid: b616cef045c2a1047a95ea1258163fdd, type: 2}
   biome: {fileID: 11400000, guid: b55dac4abd14abf47b9dd829303391f3, type: 2}
+  spawnClearRadius: 6
+  collisionRadius: 2
 --- !u!4 &1959282501
 Transform:
   m_ObjectHideFlags: 0
@@ -1889,6 +1892,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   targetFrameRate: 60
   keepScreenOn: 1
+--- !u!114 &1959282505
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1959282499}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c040ad599873d2409fb9f7e4210cd11, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  menuSceneName: MainMenu
 --- !u!1 &1963164186
 GameObject:
   m_ObjectHideFlags: 0
