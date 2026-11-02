@@ -42,14 +42,15 @@ namespace PROCEDURAL_GAME.World
                 if (profile == null) continue;
 
                 generator.Generate(coord, profile, placements);
+                ScatterProfile.Variant[] variants = profile.Variants;
 
                 foreach (ScatterPlacement placement in placements)
                 {
-                    GameObject prefab = profile.prefabs[placement.PrefabIndex];
+                    GameObject prefab = variants[placement.VariantIndex].prefab;
                     if (prefab == null) continue;
 
                     ScatterInstance instance = Acquire(profile, prefab);
-                    instance.Place(placement.Position, placement.Rotation, placement.Scale);
+                    instance.Place(placement.Position, placement.Rotation, placement.Scale, placement.ColliderScale);
                     into.Add(instance);
                 }
             }

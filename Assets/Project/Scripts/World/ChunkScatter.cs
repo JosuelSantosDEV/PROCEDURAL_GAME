@@ -9,10 +9,14 @@ namespace PROCEDURAL_GAME.World
     /// <summary>Um objeto a colocar: qual variação do prefab e onde.</summary>
     public struct ScatterPlacement
     {
-        public int PrefabIndex;
+        /// <summary>Índice em <see cref="ScatterProfile.Variants"/>.</summary>
+        public int VariantIndex;
         public Vector3 Position;
         public Quaternion Rotation;
         public float Scale;
+
+        /// <summary>Multiplicador do colisor do grupo da variação (1 = padrão do perfil).</summary>
+        public float ColliderScale;
     }
 
     /// <summary>
@@ -37,6 +41,11 @@ namespace PROCEDURAL_GAME.World
         // Reaproveitada a cada chamada para não gerar lixo de memória.
         private readonly List<Vector2> accepted = new List<Vector2>();
 
+        // Variações liberadas pela ferramenta de calibração (só usada quando ScatterTuning.HasFilter).
+        private readonly List<int> enabledVariants = new List<int>();
+        private int[] enabledStart = System.Array.Empty<int>();
+        private int[] enabledCount = System.Array.Empty<int>();
+
         public ChunkScatter(TerrainNoise terrain, int seed, float chunkSize, float spawnClearRadius)
         {
             this.terrain = terrain;
@@ -50,7 +59,43 @@ namespace PROCEDURAL_GAME.World
             results.Clear();
             accepted.Clear();
 
-            if (profile.prefabs == null || profile.prefabs.Length == 0) return;
+            ScatterProfile.Variant[] variants = profile.Variants;
+            if (variants.Length == 0) return;
+
+            // Filtro de variações (só com a ferramenta de calibração): tudo desmarcado = nenhum objeto deste perfil.
+            bool filtering = ScatterTuning.HasFilter;
+            if (filtering)
+            {
+                enabledVariants.Clear();
+                for (int v = 0; v < variants.Length; v++)
+                {
+                    if (ScatterTuning.IsEnabled(profile, in variants[v])) enabledVariants.Add(v);
+                }
+
+                if (enabledVariants.Count == 0) return;
+
+                if (profile.HasGroups)
+                {
+                    int groupCount = profile.groups.Length;
+                    if (enabledStart.Length < groupCount)
+                    {
+                        enabledStart = new int[groupCount];
+                        enabledCount = new int[groupCount];
+                    }
+
+                    System.Array.Clear(enabledCount, 0, groupCount);
+
+                    // As variações liberadas seguem a ordem dos grupos, então as de cada grupo ficam seguidas na lista.
+                    for (int e = 0; e < enabledVariants.Count; e++)
+                    {
+                        int g = variants[enabledVariants[e]].group;
+                        if (enabledCount[g] == 0) enabledStart[g] = e;
+                        enabledCount[g]++;
+                    }
+                }
+            }
+
+            bool grouped = profile.HasGroups;
 
             Random random = new Random(math.max(1u, math.hash(new int4(seed, coord.x, coord.y, profile.salt))));
             float originX = coord.x * chunkSize;
@@ -63,7 +108,7 @@ namespace PROCEDURAL_GAME.World
 
             // Densidade escolhida pelo jogador no menu de Desempenho. Reduzir só corta o fim da sequência de
             // tentativas: os objetos que ficam continuam exatamente nos mesmos lugares.
-            int attempts = Mathf.RoundToInt(profile.attemptsPerChunk * PerformanceSettings.GetDensity(profile.category));
+            int attempts = Mathf.RoundToInt(profile.attemptsPerChunk * PerformanceSettings.GetEffectiveDensity(profile.categoryId));
 
             for (int i = 0; i < attempts; i++)
             {
@@ -71,7 +116,21 @@ namespace PROCEDURAL_GAME.World
                 // uma regra (ex.: inclinação máxima) não embaralha as posições das outras tentativas.
                 float x = originX + random.NextFloat() * chunkSize;
                 float z = originZ + random.NextFloat() * chunkSize;
-                int prefabIndex = random.NextInt(profile.prefabs.Length);
+
+                // Um único número sorteado por tentativa, como antes (as posições não mudam). Com grupos, ele escolhe
+                // primeiro o TIPO (pelo peso) e depois a variação dentro dele: cada tipo aparece com a mesma frequência,
+                // não importa quantas variações tenha. Com filtro, só o mapeamento para o que está liberado muda.
+                int variantIndex;
+                if (grouped)
+                {
+                    variantIndex = PickGroupedVariant(profile, random.NextFloat(), filtering);
+                }
+                else
+                {
+                    int drawn = random.NextInt(variants.Length);
+                    variantIndex = filtering ? enabledVariants[(int)((long)drawn * enabledVariants.Count / variants.Length)] : drawn;
+                }
+
                 float yaw = random.NextFloat(360f);
                 float scale = random.NextFloat(minScale, maxScale);
                 float clusterRoll = random.NextFloat();
@@ -85,7 +144,8 @@ namespace PROCEDURAL_GAME.World
                 float slopeX = terrain.GetHeight(x + SlopeStep, z) - terrain.GetHeight(x - SlopeStep, z);
                 float slopeZ = terrain.GetHeight(x, z + SlopeStep) - terrain.GetHeight(x, z - SlopeStep);
                 Vector3 normal = new Vector3(-slopeX, 2f * SlopeStep, -slopeZ).normalized;
-                if (Vector3.Angle(Vector3.up, normal) > profile.maxSlope) continue;
+                float slope = Vector3.Angle(Vector3.up, normal);
+                if (slope > profile.maxSlope) continue;
 
                 if (profile.clustering > 0f)
                 {
@@ -99,14 +159,64 @@ namespace PROCEDURAL_GAME.World
 
                 Quaternion tilt = Quaternion.Slerp(Quaternion.identity, Quaternion.FromToRotation(Vector3.up, normal), profile.alignToSurface);
 
+                // Altura final = terreno - afundamento fixo do perfil + altura do tipo (metros, absoluto; negativo enterra).
+                int group = variants[variantIndex].group;
+
                 results.Add(new ScatterPlacement
                 {
-                    PrefabIndex = prefabIndex,
-                    Position = new Vector3(x, height - profile.sinkDepth * scale, z),
+                    VariantIndex = variantIndex,
+                    Position = new Vector3(x, height - profile.sinkDepth * scale + ScatterTuning.GetElevation(profile, group), z),
                     Rotation = tilt * Quaternion.Euler(0f, yaw, 0f),
-                    Scale = scale
+                    Scale = scale,
+                    ColliderScale = ScatterTuning.GetColliderScale(profile, group)
                 });
             }
+        }
+
+        /// <summary>
+        /// Escolhe o tipo (grupo) com probabilidade proporcional ao peso e, dentro dele, uma variação. Usa um só número
+        /// <paramref name="u"/> em [0,1): a parte que sobra depois de achar o tipo escolhe a variação.
+        /// </summary>
+        private int PickGroupedVariant(ScatterProfile profile, float u, bool filtering)
+        {
+            int groupCount = profile.groups.Length;
+
+            float total = 0f;
+            int lastEligible = -1;
+            for (int g = 0; g < groupCount; g++)
+            {
+                if (VariationsInGroup(profile, g, filtering) == 0) continue;
+                total += profile.GetGroupWeight(g);
+                lastEligible = g;
+            }
+
+            float target = u * total;
+            float lower = 0f;
+            int chosen = -1;
+            float chosenLower = 0f;
+
+            for (int g = 0; g < groupCount; g++)
+            {
+                if (VariationsInGroup(profile, g, filtering) == 0) continue;
+
+                chosen = g;
+                chosenLower = lower;
+                lower += profile.GetGroupWeight(g);
+
+                // O último tipo elegível recebe o resto: evita falha por arredondamento de float.
+                if (target < lower || g == lastEligible) break;
+            }
+
+            int count = VariationsInGroup(profile, chosen, filtering);
+            float fraction = Mathf.Clamp01((target - chosenLower) / profile.GetGroupWeight(chosen));
+            int offset = Mathf.Min(count - 1, (int)(fraction * count));
+
+            return filtering ? enabledVariants[enabledStart[chosen] + offset] : profile.GetGroupFirst(chosen) + offset;
+        }
+
+        private int VariationsInGroup(ScatterProfile profile, int group, bool filtering)
+        {
+            return filtering ? enabledCount[group] : profile.GetGroupLength(group);
         }
 
         private bool IsTooClose(float x, float z, float spacingSqr)

@@ -12,56 +12,433 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5f2710e03e9c872408b42f6176877f10, type: 3}
   m_Name: ArvoresMobile
   m_EditorClassIdentifier: 
-  prefabs:
-  - {fileID: 2305000110707992399, guid: 7fed74563a868754791b2b59a5b5d431, type: 3}
-  - {fileID: 8301515439290927329, guid: f9aa04b46dcf88a4ba04231304df1792, type: 3}
-  - {fileID: 2950439035895575615, guid: 799d845134124d04683fca945f0d0980, type: 3}
-  - {fileID: 4745507022502446170, guid: 24f4be8d631c2c147a6c73697fa766f3, type: 3}
-  - {fileID: 6012645543989609733, guid: 047f327e91c952d4aa83761a0e313302, type: 3}
-  - {fileID: 4548824063991107746, guid: a75a073f62df7e74ca9bdb7c29c5d24e, type: 3}
-  - {fileID: 8644694268881295235, guid: c352d4cb890ee674ab2d05f6d11ad00b, type: 3}
-  - {fileID: 3424450671555818402, guid: f8cc1f09fcfa25342bbb6f812209d7b7, type: 3}
-  - {fileID: 7189926943928029272, guid: 38cc37925caf4d54eb172c68dd7114f6, type: 3}
-  - {fileID: 2085154477279628204, guid: 24609e7889ee98b4f882dd662ec8040d, type: 3}
-  - {fileID: 1689178081278817674, guid: 57735fb208154d746a740192357c5fbb, type: 3}
-  - {fileID: 9118535108632722088, guid: bc8ca2f849dc68a44a8c37fb84564bc8, type: 3}
-  - {fileID: 7908963651354416109, guid: 15efa7f74bc9b2d49b0ff982be975e35, type: 3}
-  - {fileID: 8996647119961517785, guid: 0c98a1a04ddaa144c813152b2cee35cc, type: 3}
-  - {fileID: 5339936558882397716, guid: 37335e4443b980a4296b2a8b71db2462, type: 3}
-  - {fileID: 7614595184431236036, guid: ee187b0191506bd499d72e59b65ad2c9, type: 3}
-  - {fileID: 8425062175627258300, guid: fd7dda377534cc340937e61a19c35cd7, type: 3}
-  - {fileID: 3448590478100863996, guid: f21bed309ec18e942a329bc234de8827, type: 3}
-  - {fileID: 2637131497344719638, guid: aeb9677bdd54cde4398afbdd99cc7276, type: 3}
-  - {fileID: 3643843836008492306, guid: 3589874a4e5c70e4bb3377e0ff73aed0, type: 3}
-  - {fileID: 1131824747501265131, guid: e14d1242cb2f5804285b8608a17515a6, type: 3}
-  - {fileID: 6471620071981783216, guid: 902f56342c6e79343b498d40ed567824, type: 3}
-  - {fileID: 3069143698340948297, guid: 37e604c6d0ff80d4aa741d109b40fa03, type: 3}
-  - {fileID: 6971373105492309386, guid: 3b29332f905941e4c97838b6caf9b733, type: 3}
-  - {fileID: 5760882261068689599, guid: 15fe503ef27e0204ca2f689c5d8b930e, type: 3}
-  - {fileID: 3084800685635330159, guid: 2256fe35b81c09848bd783884698c0b4, type: 3}
-  - {fileID: 6727001334799726239, guid: aca5e2a213410ef4ea4a3e42521e5860, type: 3}
-  - {fileID: 2427696799562868962, guid: 7255acaa79af0a14aa0a496ddc16ae9c, type: 3}
-  - {fileID: 8152069723474585060, guid: aedb3610904366344a70f6284d0d792d, type: 3}
-  - {fileID: 8952438521861425188, guid: 5002c9ef9b59f874d98f2e4b4b2382bd, type: 3}
-  - {fileID: 8683824115384374818, guid: 3d885ecf5103e474082138c896a3408a, type: 3}
-  - {fileID: 7085543043887052858, guid: 9a2d8ba5ab2303242ad05ee330675a3d, type: 3}
-  - {fileID: 4201764567100300312, guid: d1ae2da8bc4c2c04292bb76d2e4a7e93, type: 3}
-  - {fileID: 3895456328033410288, guid: 8e5ea7aedc51bad43b396761cb291bba, type: 3}
-  - {fileID: 6151309029690637417, guid: 9801c386aca76944f818dda636e8644a, type: 3}
-  - {fileID: 6619639050752236051, guid: 9c31471d0b7543b4381045182a77c081, type: 3}
-  - {fileID: 8458674270045769824, guid: 852421fd7d600944e8020c476371293e, type: 3}
-  - {fileID: 7393963053330577820, guid: 64a295aa7ace8f24b8bb5098d7a46f08, type: 3}
-  - {fileID: 1618093650661053632, guid: b68b25bb75f9f6145b10130943fc3bd2, type: 3}
-  - {fileID: 1705687853902686956, guid: aaf39484df4f71d40867c77a0c0c026b, type: 3}
-  - {fileID: 3252179671696944911, guid: abc3f8a620fde2d4d930ae2cdbca04cc, type: 3}
-  - {fileID: 3355841467743534015, guid: b875ee8de7a804844beba3fc86558641, type: 3}
-  - {fileID: 6522142880712097596, guid: b09b4ef1a8d1cab4fbbe88cfcb4753d0, type: 3}
-  - {fileID: 3126418148805503736, guid: 893c6f38e4b7d6d4586141035e36b91f, type: 3}
-  - {fileID: 3769691058968610357, guid: 6a02294d02c1dee4cb5f08dd251d63df, type: 3}
-  - {fileID: 8033109641178071077, guid: cf9f64b2f2489434e844f231b14eca54, type: 3}
-  - {fileID: 2736597848702171867, guid: 77c10c354aef1c041bca330e008833f1, type: 3}
-  - {fileID: 1024962308694807879, guid: c3acf9952bc6ee24c9ce2c7b7b3f737c, type: 3}
+  prefabs: []
+  groups:
+  - id: 5Arms
+    displayName: 5Arms
+    elevation: -1
+    colliderScale: 1
+    weight: 1
+    variants:
+    - prefab: {fileID: 8458231053791019875, guid: 2fe3b1868a42aba4a9f7b439ea2e3a60,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 3398032141706773066, guid: 46fbfab16d3f6c849a222effe9094f17,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 7209076552563458851, guid: df3e899e2a33c7c40865796c25400d93,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 8301515439290927329, guid: f9aa04b46dcf88a4ba04231304df1792,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 2950439035895575615, guid: 799d845134124d04683fca945f0d0980,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 4548824063991107746, guid: a75a073f62df7e74ca9bdb7c29c5d24e,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 2305000110707992399, guid: 7fed74563a868754791b2b59a5b5d431,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 4745507022502446170, guid: 24f4be8d631c2c147a6c73697fa766f3,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 6012645543989609733, guid: 047f327e91c952d4aa83761a0e313302,
+        type: 3}
+      pack: Summer
+  - id: Curved
+    displayName: Curved
+    elevation: -0.7
+    colliderScale: 1
+    weight: 1
+    variants:
+    - prefab: {fileID: 8793730985916350544, guid: e63996a6bdc3f744fa729e8ebc6ee899,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 519072596955965747, guid: ea5e998774d12e44c909581802ea384f,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 8863451877545670258, guid: acb14c5aaef1c97478607e666ae2018a,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 3424450671555818402, guid: f8cc1f09fcfa25342bbb6f812209d7b7,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 2085154477279628204, guid: 24609e7889ee98b4f882dd662ec8040d,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 9118535108632722088, guid: bc8ca2f849dc68a44a8c37fb84564bc8,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 8644694268881295235, guid: c352d4cb890ee674ab2d05f6d11ad00b,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 7189926943928029272, guid: 38cc37925caf4d54eb172c68dd7114f6,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 1689178081278817674, guid: 57735fb208154d746a740192357c5fbb,
+        type: 3}
+      pack: Summer
+  - id: FullTree
+    displayName: FullTree
+    elevation: -0.3
+    colliderScale: 1
+    weight: 1
+    variants:
+    - prefab: {fileID: 1505787874932268355, guid: 5e15c677c2730704da6a514bfda4c52b,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 6372015224176197961, guid: bf18fbb7375818e458317ee2b9ef849d,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 5340414924865997502, guid: aceedc9a229d05c4c94bb60a2d07ca76,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 8996647119961517785, guid: 0c98a1a04ddaa144c813152b2cee35cc,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 7614595184431236036, guid: ee187b0191506bd499d72e59b65ad2c9,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 8425062175627258300, guid: fd7dda377534cc340937e61a19c35cd7,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 7908963651354416109, guid: 15efa7f74bc9b2d49b0ff982be975e35,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 5339936558882397716, guid: 37335e4443b980a4296b2a8b71db2462,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 3448590478100863996, guid: f21bed309ec18e942a329bc234de8827,
+        type: 3}
+      pack: Summer
+  - id: SkinnyBunches
+    displayName: SkinnyBunches
+    elevation: -0.5
+    colliderScale: 1
+    weight: 1
+    variants:
+    - prefab: {fileID: 4465874084381229501, guid: 36f5465d04c1b4a48b8d44d06bdaaa52,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 3344585347942872345, guid: 2cc9decf0de51f942a97794c7ad32d12,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 7348751049711921147, guid: 1d0558b65e48fe9438a50f142b8c2050,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 2637131497344719638, guid: aeb9677bdd54cde4398afbdd99cc7276,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 1131824747501265131, guid: e14d1242cb2f5804285b8608a17515a6,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 3069143698340948297, guid: 37e604c6d0ff80d4aa741d109b40fa03,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 3643843836008492306, guid: 3589874a4e5c70e4bb3377e0ff73aed0,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 6471620071981783216, guid: 902f56342c6e79343b498d40ed567824,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 6971373105492309386, guid: 3b29332f905941e4c97838b6caf9b733,
+        type: 3}
+      pack: Summer
+  - id: SkinnyTall
+    displayName: SkinnyTall
+    elevation: -0.3
+    colliderScale: 1
+    weight: 1
+    variants:
+    - prefab: {fileID: 5530921069300599494, guid: 0e486106365da2f4e8dc70da9140c5b3,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 3041543482183521326, guid: 7c8df4ba14b709448b48897a98d125bd,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 7702186781515237700, guid: bf62c6998502a2e4cb4306c200dad433,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 5760882261068689599, guid: 15fe503ef27e0204ca2f689c5d8b930e,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 6727001334799726239, guid: aca5e2a213410ef4ea4a3e42521e5860,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 8952438521861425188, guid: 5002c9ef9b59f874d98f2e4b4b2382bd,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 3084800685635330159, guid: 2256fe35b81c09848bd783884698c0b4,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 2427696799562868962, guid: 7255acaa79af0a14aa0a496ddc16ae9c,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 8152069723474585060, guid: aedb3610904366344a70f6284d0d792d,
+        type: 3}
+      pack: Summer
+  - id: TallThin
+    displayName: TallThin
+    elevation: -1
+    colliderScale: 1
+    weight: 1
+    variants:
+    - prefab: {fileID: 6633646162051131235, guid: db2d619de57533e4e89b1eac6397960e,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 7903184099085352098, guid: 75c453d0d14152f489f389b730303468,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 8552341926277466974, guid: 9ce34d501192f8e40986633d9537c97c,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 8683824115384374818, guid: 3d885ecf5103e474082138c896a3408a,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 4201764567100300312, guid: d1ae2da8bc4c2c04292bb76d2e4a7e93,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 6151309029690637417, guid: 9801c386aca76944f818dda636e8644a,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 7085543043887052858, guid: 9a2d8ba5ab2303242ad05ee330675a3d,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 3895456328033410288, guid: 8e5ea7aedc51bad43b396761cb291bba,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 6619639050752236051, guid: 9c31471d0b7543b4381045182a77c081,
+        type: 3}
+      pack: Summer
+  - id: Tree_short
+    displayName: Tree_short
+    elevation: -0.5
+    colliderScale: 1
+    weight: 1
+    variants:
+    - prefab: {fileID: 3779745446874977201, guid: bd391ae6b99ae55488d4a6b87338eb16,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 2344157764493032825, guid: 1d3e36692c0a93c4b8feed244de5045e,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 2447126307240257337, guid: 48282037d89fd2a4499ea2f18da5d55b,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 7393963053330577820, guid: 64a295aa7ace8f24b8bb5098d7a46f08,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 1618093650661053632, guid: b68b25bb75f9f6145b10130943fc3bd2,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 3252179671696944911, guid: abc3f8a620fde2d4d930ae2cdbca04cc,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 8458674270045769824, guid: 852421fd7d600944e8020c476371293e,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 1705687853902686956, guid: aaf39484df4f71d40867c77a0c0c026b,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 3355841467743534015, guid: b875ee8de7a804844beba3fc86558641,
+        type: 3}
+      pack: Summer
+  - id: Tree_single
+    displayName: Tree_single
+    elevation: -1.5
+    colliderScale: 1
+    weight: 1
+    variants:
+    - prefab: {fileID: 4775714838987541496, guid: d30449185203dd04a8143ae91288d08f,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 4878120655502966560, guid: ff364bd593ee59a4dae3f789b002ab8a,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 1282454001268126682, guid: b9f9ffa58831f234db4a010fe2d15fbe,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 6522142880712097596, guid: b09b4ef1a8d1cab4fbbe88cfcb4753d0,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 3769691058968610357, guid: 6a02294d02c1dee4cb5f08dd251d63df,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 1024962308694807879, guid: c3acf9952bc6ee24c9ce2c7b7b3f737c,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 3126418148805503736, guid: 893c6f38e4b7d6d4586141035e36b91f,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 8033109641178071077, guid: cf9f64b2f2489434e844f231b14eca54,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 2736597848702171867, guid: 77c10c354aef1c041bca330e008833f1,
+        type: 3}
+      pack: Summer
+  - id: Tree
+    displayName: Tree
+    elevation: -0.1
+    colliderScale: 1
+    weight: 1
+    variants:
+    - prefab: {fileID: 7750504858527256070, guid: fb611a83fb4af294495739f81ae9e22f,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 8928414047546653490, guid: dd8d69d438c7a524ba6866f5557c1231,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 1340635186545256531, guid: 0a629ef4f82dd2e40a886997b39f8832,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 6997490658222008858, guid: e86f309b33d408e4a9a56c1a0114a1f9,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 5232344737878220593, guid: 6246a08673301664c85da12ca3b94f8a,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 7969527599384320207, guid: 2bf3ae4cd7cea2f4ab2865fb82e40f66,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 7779897678072107980, guid: 6563027ae0590d244bdf36729cdeed08,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 3959108266198552055, guid: 72771e2b9479bf14a81cb2f6d1cfc550,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 8756115578141748802, guid: 2e745d79168d3f54a8c2d48557ae441d,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 7581267191557111932, guid: cf88c4423d963f84caf7065fb62528e2,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 7427937023049120951, guid: d0b10ee5fa5d75a4ca031228eeb2242e,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 2185067951267898671, guid: d60bd2bf9224a484b8c559e625ca1487,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 2376678448834602979, guid: 9fd603aa32d1d26479049ea7593770e2,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 9021107347604778410, guid: fed8d4ef2fd775442a0187459de12be9,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 3837186547977036780, guid: 120f641075fbcc14195308feb1716c00,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 246161087549127054, guid: 90a192f958effdf498d66ab1034d59f9,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 7586977490400654695, guid: 5bfaac2b1eef8754a9622d7ad499bc1d,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 8219471257511453769, guid: 0481b686b18aedc45a69d5be205265b3,
+        type: 3}
+      pack: Summer
+  - id: young2
+    displayName: young2
+    elevation: -0.1
+    colliderScale: 1
+    weight: 1
+    variants:
+    - prefab: {fileID: 5649103547026363985, guid: acc7d5b355791e84ca3cd0ef76858ecc,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 5740798189632484478, guid: b29102e4db493f54b98df30248fdc7e9,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 7028902127709440936, guid: dbc148b2fc1609d4a86fed7d941959ce,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 5760170739248127714, guid: 1b56959ae2b21ef47bdfa892f59b03e4,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 8143371965299517294, guid: fd1d577d27f55904ba33a5262698cc9d,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 3257314852583766847, guid: 0f7efa26b1e010243b0a034af82055c0,
+        type: 3}
+      pack: Autumn
+    - prefab: {fileID: 2364403314469243057, guid: 05ed79a8b9fcc634f8b58c2943e268c1,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 3088670612129251826, guid: 71a237fa3ef9b494cb6d831c72dfe3a9,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 4435158115549357404, guid: 129b64724c556d74a924f86343943c09,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 235777919980588316, guid: cb9a4ff1849660a469a0aae8dbcf106b,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 8292760545832957765, guid: d457b7b840e948247a413937999e5c8c,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 1397566297496867590, guid: 6bc0a47be61d7804390998b1b18f59b9,
+        type: 3}
+      pack: Spring
+    - prefab: {fileID: 884841558186453741, guid: a78c0fc01307a8042b3b6b2098660851,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 3774959316539065581, guid: 46593c04f9e8d0d49907b85d35ab1aac,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 3596090433408528844, guid: a170b864ab9b83d4a86d58861f939d1a,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 1759858497198058253, guid: 954318c4293db344abaefb5b8a91c3b5,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 5511877960461161867, guid: 6e14ad18ca1000c4cabe8a00ea5669e9,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 5980409216898369533, guid: c56f7dffcee7ddb479285ec7eb8f78be,
+        type: 3}
+      pack: Summer
+  - id: Jungle1
+    displayName: Jungle1
+    elevation: -10
+    colliderScale: 1
+    weight: 1
+    variants:
+    - prefab: {fileID: 4462719808078266409, guid: a0aae056a61f4f8499058e6577a80929,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 3738266113628182434, guid: 2ea6da9525130754cacf3d0903641dbd,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 4035946328331260942, guid: 51d0c84c595ed6f4a90e41b4adefa76b,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 2045177678333889324, guid: 507385a739e086c4e9f5d4a606592f49,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 2636200762516655336, guid: e0a3c107a224f0a4bbf41ce588295b49,
+        type: 3}
+      pack: Summer
+    - prefab: {fileID: 7380378348123036916, guid: 7e2ab8367c264454ea57223ade9c7f38,
+        type: 3}
+      pack: Summer
+  - id: SpiralTree
+    displayName: SpiralTree
+    elevation: -1
+    colliderScale: 1
+    weight: 1
+    variants:
+    - prefab: {fileID: 6564282516527866274, guid: 3f36a482db9afa241bca12a6548b7556,
+        type: 3}
+      pack: Misc
+    - prefab: {fileID: 6564282516527866274, guid: 256aea27b6e6deb49b48e4775c568313,
+        type: 3}
+      pack: Misc
+    - prefab: {fileID: 6564282516527866274, guid: b40236563bf602e4bbbbdea3dbed3993,
+        type: 3}
+      pack: Misc
   salt: 17
+  categoryId: trees
   category: "\xC1rvores"
   attemptsPerChunk: 9
   minSpacing: 3.5
@@ -73,6 +450,6 @@ MonoBehaviour:
   minScale: 0.9
   maxScale: 1.5
   alignToSurface: 0
-  sinkDepth: 0.1
+  sinkDepth: 0
   collision: 1
   trunkRadius: 0.3

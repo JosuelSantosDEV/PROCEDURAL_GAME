@@ -15,12 +15,12 @@ RenderSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 9
   m_Fog: 1
-  m_FogColor: {r: 0.55, g: 0.57, b: 0.6, a: 1}
+  m_FogColor: {r: 0.4, g: 0.46, b: 0.44, a: 1}
   m_FogMode: 3
-  m_FogDensity: 0.014
+  m_FogDensity: 0.024
   m_LinearFogStart: 0
   m_LinearFogEnd: 300
-  m_AmbientSkyColor: {r: 0.3, g: 0.32, b: 0.35, a: 1}
+  m_AmbientSkyColor: {r: 0.22, g: 0.26, b: 0.26, a: 1}
   m_AmbientEquatorColor: {r: 0.114, g: 0.125, b: 0.133, a: 1}
   m_AmbientGroundColor: {r: 0.047, g: 0.043, b: 0.035, a: 1}
   m_AmbientIntensity: 1
@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0, g: 0, b: 0, a: 1}
+  m_IndirectSpecularColor: {r: 0.18028378, g: 0.22571412, b: 0.30692285, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -161,7 +161,7 @@ Camera:
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 2
-  m_BackGroundColor: {r: 0.55, g: 0.57, b: 0.6, a: 1}
+  m_BackGroundColor: {r: 0.4, g: 0.46, b: 0.44, a: 1}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -393,8 +393,8 @@ Light:
   serializedVersion: 10
   m_Type: 1
   m_Shape: 0
-  m_Color: {r: 0.8, g: 0.82, b: 0.85, a: 1}
-  m_Intensity: 0.8
+  m_Color: {r: 0.7, g: 0.76, b: 0.8, a: 1}
+  m_Intensity: 0.65
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -1773,6 +1773,7 @@ GameObject:
   - component: {fileID: 1959282504}
   - component: {fileID: 1959282503}
   - component: {fileID: 1959282505}
+  - component: {fileID: 1959282506}
   m_Layer: 0
   m_Name: World
   m_TagString: Untagged
@@ -1831,7 +1832,7 @@ MonoBehaviour:
       m_PostInfinity: 2
       m_RotationOrder: 4
   terrainMaterial: {fileID: 2100000, guid: b616cef045c2a1047a95ea1258163fdd, type: 2}
-  biome: {fileID: 11400000, guid: b55dac4abd14abf47b9dd829303391f3, type: 2}
+  biome: {fileID: 11400000, guid: c55eb998998d940409dc299aaf9bd5cf, type: 2}
   spawnClearRadius: 6
   collisionRadius: 2
 --- !u!4 &1959282501
@@ -1905,6 +1906,30 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   menuSceneName: MainMenu
+--- !u!114 &1959282506
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1959282499}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7b060976f3e0d6448937824bd502b9ed, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  minViewRadius: 2
+  minObjectFactor: 0.25
+  factorStep: 0.2
+  warmupSeconds: 8
+  windowSeconds: 3
+  settleSeconds: 6
+  lowerBelow: 0.9
+  raiseAbove: 0.97
+  raiseDelay: 25
+  maxRaiseDelay: 240
+  edgeFogFactor: 1.9
+  fogChangePerSecond: 0.004
 --- !u!1 &1963164186
 GameObject:
   m_ObjectHideFlags: 0

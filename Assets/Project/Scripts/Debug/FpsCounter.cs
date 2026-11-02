@@ -15,6 +15,9 @@ namespace PROCEDURAL_GAME.DebugTools
         [Tooltip("De quanto em quanto tempo o número é atualizado, em segundos.")]
         [SerializeField, Min(0.1f)] private float refreshInterval = 0.5f;
 
+        /// <summary>Linha extra no contador (ex.: nível da qualidade automática). Quem escreve é responsável por limpar.</summary>
+        public static string ExtraInfo { get; set; }
+
         private float elapsed;
         private int frames;
         private float worstFrame;
@@ -39,6 +42,7 @@ namespace PROCEDURAL_GAME.DebugTools
 
             float averageMs = 1000f * elapsed / frames;
             label = $"{frames / elapsed:0} FPS\n{averageMs:0.0} ms  (pior {worstFrame * 1000f:0} ms)";
+            if (!string.IsNullOrEmpty(ExtraInfo)) label += "\n" + ExtraInfo;
 
             elapsed = 0f;
             frames = 0;

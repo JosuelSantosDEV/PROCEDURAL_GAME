@@ -27,6 +27,7 @@ MonoBehaviour:
   - {fileID: 8495748984823069617, guid: 3165a04d38b8a3d4fb27f4f1bbe99a92, type: 3}
   - {fileID: 5414391826843963202, guid: 2fd6f16ed3833394e90bebae04541a2e, type: 3}
   salt: 31
+  categoryId: shrubs
   category: Arbustos
   attemptsPerChunk: 20
   minSpacing: 1.5
@@ -41,3 +42,44 @@ MonoBehaviour:
   sinkDepth: 0.05
   collision: 0
   trunkRadius: 0.35
+  trunkRadiusScale: 1
+  footprints:
+  - baseRadius: 1.0380965
+    trunkRadius: 0.9024034
+    trunkCenter: {x: 0.39155775, y: 0.22368875}
+  - baseRadius: 1.2154515
+    trunkRadius: 1.1152191
+    trunkCenter: {x: -0.014506733, y: 0.8684258}
+  - baseRadius: 1.085357
+    trunkRadius: 1.085357
+    trunkCenter: {x: -0.22285631, y: -1.5401788}
+  - baseRadius: 1.2659655
+    trunkRadius: 1.2659655
+    trunkCenter: {x: -0.04470268, y: -0.65465504}
+  - baseRadius: 1.3198248
+    trunkRadius: 1.3198248
+    trunkCenter: {x: -0.09970477, y: -0.11992582}
+  - baseRadius: 1.3198248
+    trunkRadius: 1.3198248
+    trunkCenter: {x: -0.09970477, y: -0.11992582}
+  - baseRadius: 1.1410686
+    trunkRadius: 1.1410686
+    trunkCenter: {x: -0.0031149287, y: 0.019248253}
+  - baseRadius: 0.84796137
+    trunkRadius: 0.84796137
+    trunkCenter: {x: 0.43738157, y: 0.2680575}
+  - baseRadius: 1.2154514
+    trunkRadius: 1.1152191
+    trunkCenter: {x: -0.014506793, y: 0.8684258}
+  - baseRadius: 1.085357
+    trunkRadius: 1.085357
+    trunkCenter: {x: -0.22285631, y: -1.5401788}
+  - baseRadius: 1.2659655
+    trunkRadius: 1.2659655
+    trunkCenter: {x: -0.04470268, y: -0.65465504}
+  - baseRadius: 1.3198248
+    trunkRadius: 1.3198248
+    trunkCenter: {x: -0.09970477, y: -0.11992582}
+  - baseRadius: 1.1410686
+    trunkRadius: 1.1410686
+    trunkCenter: {x: -0.0031149287, y: 0.019248253}

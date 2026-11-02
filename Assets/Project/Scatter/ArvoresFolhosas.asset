@@ -20,6 +20,8 @@ MonoBehaviour:
   - {fileID: 8033109641178071077, guid: cf9f64b2f2489434e844f231b14eca54, type: 3}
   - {fileID: 2736597848702171867, guid: 77c10c354aef1c041bca330e008833f1, type: 3}
   salt: 17
+  categoryId: 
+  category: 
   attemptsPerChunk: 8
   minSpacing: 7
   clustering: 0.7
@@ -33,3 +35,23 @@ MonoBehaviour:
   sinkDepth: 0.1
   collision: 1
   trunkRadius: 0.3
+  trunkRadiusScale: 1
+  footprints:
+  - baseRadius: 0
+    trunkRadius: 0
+    trunkCenter: {x: 0, y: 0}
+  - baseRadius: 0
+    trunkRadius: 0
+    trunkCenter: {x: 0, y: 0}
+  - baseRadius: 0
+    trunkRadius: 0
+    trunkCenter: {x: 0, y: 0}
+  - baseRadius: 0
+    trunkRadius: 0
+    trunkCenter: {x: 0, y: 0}
+  - baseRadius: 0
+    trunkRadius: 0
+    trunkCenter: {x: 0, y: 0}
+  - baseRadius: 0
+    trunkRadius: 0
+    trunkCenter: {x: 0, y: 0}

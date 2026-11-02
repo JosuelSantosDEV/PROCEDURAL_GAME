@@ -61,6 +61,20 @@ namespace PROCEDURAL_GAME.World
             if (scatter != null) scatter.Populate(coord, scatterInstances);
         }
 
+        /// <summary>Refaz só os objetos do chunk (a quantidade mudou), sem recriar o terreno. As posições seguem as mesmas.</summary>
+        public void Repopulate()
+        {
+            if (scatter == null) return;
+
+            // Place() deixa os colisores desligados; guardar o estado e reaplicar mantém a colisão dos chunks perto do Player.
+            bool collisions = scatterCollisionsOn;
+
+            scatter.Release(scatterInstances);
+            scatterCollisionsOn = false;
+            scatter.Populate(Coord, scatterInstances);
+            SetScatterCollisions(collisions);
+        }
+
         /// <summary>Liga ou desliga os colisores dos objetos do chunk (só os chunks perto do Player precisam).</summary>
         public void SetScatterCollisions(bool enabled)
         {

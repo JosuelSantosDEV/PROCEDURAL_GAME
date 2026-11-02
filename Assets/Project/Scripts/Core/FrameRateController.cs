@@ -22,7 +22,10 @@ namespace PROCEDURAL_GAME.Core
             QualitySettings.vSyncCount = 0;
 
             // A escolha do jogador no menu de Desempenho vale mais que o valor configurado na cena.
-            int fps = PerformanceSettings.GetTargetFps(targetFrameRate);
+            // Com a qualidade automática ligada, o teto de FPS é o próprio FPS desejado: o jogo não gasta bateria acima disso.
+            int fps = PerformanceSettings.GetAutoQuality()
+                ? PerformanceSettings.GetAutoTargetFps()
+                : PerformanceSettings.GetTargetFps(targetFrameRate);
 
             Application.targetFrameRate = fps > 0
                 ? fps

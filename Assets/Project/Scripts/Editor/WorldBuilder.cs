@@ -54,6 +54,7 @@ namespace PROCEDURAL_GAME.EditorTools
 
             GameObject world = generator.gameObject;
             if (world.GetComponent<AtmosphereController>() == null) Undo.AddComponent<AtmosphereController>(world);
+            if (world.GetComponent<AdaptiveQuality>() == null) Undo.AddComponent<AdaptiveQuality>(world);
             if (world.GetComponent<FrameRateController>() == null) Undo.AddComponent<FrameRateController>(world);
             if (world.GetComponent<FpsCounter>() == null) Undo.AddComponent<FpsCounter>(world);
             if (world.GetComponent<InGameMenu>() == null) Undo.AddComponent<InGameMenu>(world);

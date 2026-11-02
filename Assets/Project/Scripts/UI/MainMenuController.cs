@@ -27,6 +27,9 @@ namespace PROCEDURAL_GAME.UI
         // Passos do slider de FPS alvo: 30, 35 ... 120.
         private const int MaxFpsSteps = (PerformanceSettings.MaxTargetFps - PerformanceSettings.MinTargetFps) / PerformanceSettings.TargetFpsStep;
 
+        // Passos do slider de FPS desejado (qualidade automática): 15, 20 ... 60.
+        private const int MaxAutoFpsSteps = (PerformanceSettings.MaxAutoFps - PerformanceSettings.MinAutoFps) / PerformanceSettings.AutoFpsStep;
+
         private const float RowLabelWidth = 380f;
 
         [Tooltip("Biomas oferecidos, na ordem em que aparecem.")]
@@ -38,7 +41,20 @@ namespace PROCEDURAL_GAME.UI
         [Tooltip("Câmera do menu: a cor do fundo acompanha a neblina do bioma escolhido.")]
         [SerializeField] private Camera menuCamera;
 
-        private readonly List<string> categories = new List<string>();
+        // Id (ASCII, chave de gravação) e nome mostrado de cada categoria de objeto do bioma escolhido.
+        private readonly struct CategoryOption
+        {
+            public readonly string Id;
+            public readonly string Name;
+
+            public CategoryOption(string id, string name)
+            {
+                Id = id;
+                Name = name;
+            }
+        }
+
+        private readonly List<CategoryOption> categories = new List<CategoryOption>();
 
         private int biomeIndex;
         private GameObject mainPanel;
@@ -48,7 +64,8 @@ namespace PROCEDURAL_GAME.UI
         private Text performanceTitleText;
         private RectTransform performanceContent;
 
-        private BiomeProfile CurrentBiome => biomes[biomeIndex];
+        /// <summary>Bioma selecionado no menu (lido também pela ferramenta de calibração).</summary>
+        public BiomeProfile CurrentBiome => biomes[biomeIndex];
 
         private void Start()
         {
@@ -205,7 +222,7 @@ namespace PROCEDURAL_GAME.UI
 
         private void ResetPerformance()
         {
-            foreach (string category in categories) PerformanceSettings.SetDensity(category, PerformanceSettings.DefaultDensity);
+            foreach (CategoryOption category in categories) PerformanceSettings.SetDensity(category.Id, PerformanceSettings.DefaultDensity);
             PerformanceSettings.ResetGeneral();
             RebuildRows();
         }
@@ -223,19 +240,24 @@ namespace PROCEDURAL_GAME.UI
             }
 
             CreateSectionTitle("Geral");
-            CreateTargetFpsRow();
+            CreateAutoQualityRow();
+
+            // Com a qualidade automática, o FPS desejado substitui o teto manual (o jogo roda limitado a ele).
+            if (PerformanceSettings.GetAutoQuality()) CreateAutoFpsRow();
+            else CreateTargetFpsRow();
+
             CreateFpsCounterRow();
-            CreateSectionTitle("Objetos");
+            CreateSectionTitle(PerformanceSettings.GetAutoQuality() ? "Objetos (máximo)" : "Objetos");
 
             categories.Clear();
             if (CurrentBiome.scatter != null)
             {
                 foreach (ScatterProfile profile in CurrentBiome.scatter)
                 {
-                    if (profile != null && !string.IsNullOrEmpty(profile.category) && !categories.Contains(profile.category))
-                    {
-                        categories.Add(profile.category);
-                    }
+                    if (profile == null || string.IsNullOrEmpty(profile.categoryId) || ContainsCategory(profile.categoryId)) continue;
+
+                    string name = string.IsNullOrEmpty(profile.category) ? profile.categoryId : profile.category;
+                    categories.Add(new CategoryOption(profile.categoryId, name));
                 }
             }
 
@@ -246,15 +268,25 @@ namespace PROCEDURAL_GAME.UI
                 return;
             }
 
-            foreach (string category in categories) CreateRow(category);
+            foreach (CategoryOption category in categories) CreateRow(category);
         }
 
-        private void CreateRow(string category)
+        private bool ContainsCategory(string id)
         {
-            int steps = Mathf.Clamp(Mathf.RoundToInt(PerformanceSettings.GetDensity(category) * StepsPerUnit), 0, MaxSteps);
+            foreach (CategoryOption category in categories)
+            {
+                if (category.Id == id) return true;
+            }
 
-            CreateSliderRow(category, MaxSteps, steps, FormatPercent,
-                newSteps => PerformanceSettings.SetDensity(category, newSteps / (float)StepsPerUnit));
+            return false;
+        }
+
+        private void CreateRow(CategoryOption category)
+        {
+            int steps = Mathf.Clamp(Mathf.RoundToInt(PerformanceSettings.GetDensity(category.Id) * StepsPerUnit), 0, MaxSteps);
+
+            CreateSliderRow(category.Name, MaxSteps, steps, FormatPercent,
+                newSteps => PerformanceSettings.SetDensity(category.Id, newSteps / (float)StepsPerUnit));
         }
 
         // FPS alvo em passos de 5 (30, 35 ... 120). Se o aparelho tiver tela de 60 Hz, valores acima de 60 não aparecem na tela.
@@ -269,21 +301,59 @@ namespace PROCEDURAL_GAME.UI
 
         private void CreateFpsCounterRow()
         {
-            RectTransform row = CreateRowContainer("Row Contador de FPS");
+            CreateToggleRow("Contador de FPS", PerformanceSettings.GetShowFpsCounter(PerformanceSettings.DefaultShowFpsCounter),
+                PerformanceSettings.SetShowFpsCounter);
+        }
 
-            Text label = UiKit.CreateText(row, "Label", "Contador de FPS", 42, TextAnchor.MiddleLeft, UiKit.TextColor);
+        // Liga a qualidade automática e troca as linhas de FPS (por isso refaz a lista).
+        private void CreateAutoQualityRow()
+        {
+            bool enabled = PerformanceSettings.GetAutoQuality();
+
+            CreateToggleRow("Qualidade automática", enabled, on =>
+            {
+                PerformanceSettings.SetAutoQuality(on);
+                RebuildRows();
+            });
+
+            if (!enabled) return;
+
+            Text hint = UiKit.CreateText(performanceContent, "AutoHint",
+                "O jogo mede o FPS e reduz o raio de visão e a quantidade de objetos para alcançar o FPS desejado, e devolve a qualidade quando sobra folga. Os valores de Objetos abaixo viram o máximo.",
+                28, TextAnchor.UpperLeft, UiKit.MutedTextColor);
+            UiKit.SetLayout(hint.gameObject, preferredHeight: 120f);
+        }
+
+        // FPS desejado da qualidade automática: de 15 a 60 em passos de 5.
+        private void CreateAutoFpsRow()
+        {
+            int current = PerformanceSettings.GetAutoTargetFps();
+            int steps = Mathf.RoundToInt((current - PerformanceSettings.MinAutoFps) / (float)PerformanceSettings.AutoFpsStep);
+
+            CreateSliderRow("FPS desejado", MaxAutoFpsSteps, Mathf.Clamp(steps, 0, MaxAutoFpsSteps), FormatAutoFps,
+                newSteps => PerformanceSettings.SetAutoTargetFps(AutoFpsFromSteps(newSteps)));
+        }
+
+        private void CreateToggleRow(string labelText, bool current, System.Action<bool> onChanged)
+        {
+            RectTransform row = CreateRowContainer("ToggleRow");
+
+            Text label = UiKit.CreateText(row, "Label", labelText, 42, TextAnchor.MiddleLeft, UiKit.TextColor);
             UiKit.SetLayout(label.gameObject, preferredWidth: RowLabelWidth, preferredHeight: 100f);
 
-            bool show = PerformanceSettings.GetShowFpsCounter(PerformanceSettings.DefaultShowFpsCounter);
+            bool state = current;
             Button toggle = UiKit.CreateButton(row, "Toggle", string.Empty, new Vector2(0f, 90f), 40, null);
             UiKit.SetLayout(toggle.gameObject, preferredHeight: 90f, flexibleWidth: 1f);
-            ApplyToggleLook(toggle, show);
+            ApplyToggleLook(toggle, state);
 
             toggle.onClick.AddListener(() =>
             {
-                show = !show;
-                PerformanceSettings.SetShowFpsCounter(show);
-                ApplyToggleLook(toggle, show);
+                state = !state;
+
+                // Atualizar o botão ANTES: onChanged pode refazer a lista (desativando esta linha), e o texto do botão
+                // não é mais encontrado em objeto inativo.
+                ApplyToggleLook(toggle, state);
+                onChanged(state);
             });
         }
 
@@ -299,7 +369,7 @@ namespace PROCEDURAL_GAME.UI
         /// <summary>Linha "rótulo — slider — valor". <paramref name="onChanged"/> recebe o passo escolhido (0 a <paramref name="maxSteps"/>).</summary>
         private void CreateSliderRow(string labelText, int maxSteps, int currentSteps, System.Func<int, string> format, System.Action<int> onChanged)
         {
-            RectTransform row = CreateRowContainer($"Row {labelText}");
+            RectTransform row = CreateRowContainer("SliderRow");
 
             Text label = UiKit.CreateText(row, "Label", labelText, 42, TextAnchor.MiddleLeft, UiKit.TextColor);
             UiKit.SetLayout(label.gameObject, preferredWidth: RowLabelWidth, preferredHeight: 100f);
@@ -328,7 +398,7 @@ namespace PROCEDURAL_GAME.UI
 
         private void CreateSectionTitle(string title)
         {
-            Text text = UiKit.CreateText(performanceContent, $"Section {title}", title.ToUpper(), 32, TextAnchor.LowerLeft, UiKit.MutedTextColor);
+            Text text = UiKit.CreateText(performanceContent, "SectionTitle", title.ToUpper(), 32, TextAnchor.LowerLeft, UiKit.MutedTextColor);
             UiKit.SetLayout(text.gameObject, preferredHeight: 60f);
         }
 
@@ -337,6 +407,10 @@ namespace PROCEDURAL_GAME.UI
         private static string FormatPercent(int steps) => $"{steps * PercentPerStep}%";
 
         private static string FormatFps(int steps) => $"{FpsFromSteps(steps)} FPS";
+
+        private static int AutoFpsFromSteps(int steps) => PerformanceSettings.MinAutoFps + steps * PerformanceSettings.AutoFpsStep;
+
+        private static string FormatAutoFps(int steps) => $"{AutoFpsFromSteps(steps)} FPS";
 
         // Color * float também multiplicaria o alfa e deixaria a cor translúcida.
         private static Color Darken(Color color, float factor) => new Color(color.r * factor, color.g * factor, color.b * factor, 1f);

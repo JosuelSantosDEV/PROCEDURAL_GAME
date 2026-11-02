@@ -15,6 +15,10 @@ namespace PROCEDURAL_GAME.World
         private readonly LODGroup lodGroup;
         private readonly Collider collider;
 
+        // Só no colisor de tronco: raio base (espaço local) e a cápsula, para aplicar o multiplicador do grupo em Place.
+        private CapsuleCollider trunkCapsule;
+        private float trunkRadiusLocal;
+
         public ScatterProfile Profile { get; }
         public GameObject Prefab { get; }
 
@@ -53,8 +57,15 @@ namespace PROCEDURAL_GAME.World
             transform.SetParent(parent, false);
         }
 
-        public void Place(Vector3 position, Quaternion rotation, float scale)
+        /// <param name="colliderScale">Multiplicador do raio do colisor de tronco (1 = padrão do perfil).</param>
+        public void Place(Vector3 position, Quaternion rotation, float scale, float colliderScale = 1f)
         {
+            if (trunkCapsule != null)
+            {
+                float radius = trunkRadiusLocal * colliderScale;
+                if (!Mathf.Approximately(trunkCapsule.radius, radius)) trunkCapsule.radius = radius;
+            }
+
             transform.SetPositionAndRotation(position, rotation);
             transform.localScale = baseScale * scale;
 
@@ -90,13 +101,19 @@ namespace PROCEDURAL_GAME.World
                 return box;
             }
 
-            // O raio é pedido em metros; o colisor vive no espaço local, que pode ter escala (ex.: prefab ×12).
-            float localRadius = profile.trunkRadius / Mathf.Max(0.0001f, transform.lossyScale.x);
+            // O raio é em metros; o colisor vive no espaço local, que pode ter escala (ex.: prefab ×12). O multiplicador
+            // do grupo (ScatterTuning) entra em Place, porque muda com a calibração.
+            float prefabScale = Mathf.Max(0.0001f, transform.lossyScale.x);
+            trunkRadiusLocal = profile.trunkRadius / prefabScale;
+
             CapsuleCollider capsule = gameObject.AddComponent<CapsuleCollider>();
             capsule.direction = 1;
-            capsule.radius = localRadius;
-            capsule.height = Mathf.Max(bounds.size.y, localRadius * 2f);
+            capsule.radius = trunkRadiusLocal;
+            capsule.height = Mathf.Max(bounds.size.y, trunkRadiusLocal * 2f);
+
+            // O pivô da árvore é a base do tronco: centro em x/z = 0 (o centro da malha seguiria a copa, que pode pender).
             capsule.center = new Vector3(0f, bounds.center.y, 0f);
+            trunkCapsule = capsule;
             return capsule;
         }
 

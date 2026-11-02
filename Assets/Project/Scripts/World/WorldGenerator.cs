@@ -60,6 +60,10 @@ namespace PROCEDURAL_GAME.World
         private readonly Stack<TerrainChunk> pool = new Stack<TerrainChunk>();
         private readonly List<Vector2Int> pending = new List<Vector2Int>();
         private readonly List<Vector2Int> toRelease = new List<Vector2Int>();
+        private readonly List<Vector2Int> repopulateQueue = new List<Vector2Int>();
+
+        // 0 = sem ajuste; senão, raio imposto pela qualidade automática (sempre menor que o base).
+        private int viewRadiusOverride;
 
         private TerrainNoise terrainNoise;
         private ChunkMeshBuilder meshBuilder;
@@ -73,8 +77,42 @@ namespace PROCEDURAL_GAME.World
         /// <summary>Perfil visual em uso (cores do terreno e atmosfera).</summary>
         public BiomeProfile Biome => biome;
 
-        /// <summary>Raio de carregamento efetivo, em chunks: o do bioma, se ele definir um, senão o do World.</summary>
-        private int ViewRadius => biome != null && biome.viewRadius > 0 ? biome.viewRadius : viewRadius;
+        /// <summary>Raio de carregamento do bioma, em chunks: o dele, se definir um, senão o do World. É o máximo da qualidade automática.</summary>
+        public int BaseViewRadius => biome != null && biome.viewRadius > 0 ? biome.viewRadius : viewRadius;
+
+        /// <summary>Raio em uso agora, em chunks: o ajuste da qualidade automática, se houver, senão o base.</summary>
+        public int ViewRadius => viewRadiusOverride > 0 ? viewRadiusOverride : BaseViewRadius;
+
+        public float ChunkSize => chunkSize;
+
+        /// <summary>
+        /// Muda o raio de carregamento em jogo (qualidade automática). Chunks que ficam fora são devolvidos ao pool
+        /// e os que faltam entram na fila normal. Um valor igual ou maior que o base remove o ajuste.
+        /// </summary>
+        public void SetViewRadiusOverride(int radius)
+        {
+            int value = radius >= BaseViewRadius ? 0 : Mathf.Max(1, radius);
+            if (value == viewRadiusOverride) return;
+
+            viewRadiusOverride = value;
+            if (hasCenter) RefreshChunks(lastCenter);
+        }
+
+        /// <summary>
+        /// Refaz os objetos dos chunks já carregados (a quantidade mudou). É feito aos poucos, dentro do orçamento
+        /// de milissegundos por frame, começando pelos chunks mais perto do Player.
+        /// </summary>
+        public void RepopulateAll()
+        {
+            if (scatter == null) return;
+
+            repopulateQueue.Clear();
+            repopulateQueue.AddRange(activeChunks.Keys);
+
+            // Ordem decrescente de distância: tiramos do fim da lista, então o mais perto sai primeiro.
+            Vector2Int center = WorldToChunk(target.position);
+            repopulateQueue.Sort((a, b) => SqrDistance(b, center).CompareTo(SqrDistance(a, center)));
+        }
 
         /// <summary>Altura do terreno em qualquer ponto do mundo, mesmo onde o chunk ainda não foi criado.</summary>
         public float GetHeight(float x, float z) => terrainNoise.GetHeight(x, z);
@@ -142,6 +180,7 @@ namespace PROCEDURAL_GAME.World
             }
 
             BuildPendingChunks();
+            RepopulatePending();
         }
 
         private void OnDestroy()
@@ -252,6 +291,25 @@ namespace PROCEDURAL_GAME.World
                 LoadChunk(coord);
 
                 // Pelo menos um chunk por frame, para o mundo sempre andar; o resto respeita o orçamento de tempo.
+                if (watch.Elapsed.TotalMilliseconds >= maxMillisecondsPerFrame) break;
+            }
+        }
+
+        private void RepopulatePending()
+        {
+            if (repopulateQueue.Count == 0) return;
+
+            Stopwatch watch = Stopwatch.StartNew();
+
+            while (repopulateQueue.Count > 0)
+            {
+                int last = repopulateQueue.Count - 1;
+                Vector2Int coord = repopulateQueue[last];
+                repopulateQueue.RemoveAt(last);
+
+                // O chunk pode ter sido descartado enquanto esperava na fila.
+                if (activeChunks.TryGetValue(coord, out TerrainChunk chunk)) chunk.Repopulate();
+
                 if (watch.Elapsed.TotalMilliseconds >= maxMillisecondsPerFrame) break;
             }
         }

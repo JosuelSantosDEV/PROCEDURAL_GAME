@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using PROCEDURAL_GAME.World;
 using UnityEditor;
 using UnityEngine;
@@ -24,9 +25,15 @@ namespace PROCEDURAL_GAME.EditorTools
         private const int LeafyTreesAttempts = 9;
         private const int ShrubsAttempts = 20;
 
+        // Afundamento fixo, em metros por unidade de escala. Árvores secas: o valor de sempre. Árvores folhosas: 0, porque a
+        // altura vem inteira do grupo de cada tipo (ScatterProfile.groups, valores absolutos medidos em metros).
+        private const float DeadTreesSinkDepth = 0.1f;
+        private const float LeafyTreesSinkDepth = 0f;
+
         private const string DryTreesFolder ="Assets/Dry_Trees/Prefab";
-        private const string LeafyTreesSummerFolder = "Assets/Mobile_FV/Optimized/Summer";
-        private const string LeafyTreesSpringFolder = "Assets/Mobile_FV/Optimized/Spring";
+        private const string MobileFvRoot = "Assets/Mobile_FV";
+        private const string MiscFolder = "Assets/Mobile_FV/Prefabs/Misc";
+        private const string LeafyTreesAssetPath = "Assets/Project/Scatter/ArvoresMobile.asset";
         private const string GroundCoverFolder = "Assets/Mobile_FV/Prefabs/GroundCover";
         private const string RocksFolder = "Assets/Pizza&Games/Realistic Rocks/Prefabs";
 
@@ -43,15 +50,14 @@ namespace PROCEDURAL_GAME.EditorTools
                 profile.maxSlope = 30f;
                 profile.minScale = 0.8f;
                 profile.maxScale = 1.3f;
+                profile.sinkDepth = DeadTreesSinkDepth;
                 profile.collision = ScatterCollision.Trunk;
                 profile.trunkRadius = 0.4f;
             });
 
-            // Todos os tipos de árvore de verão e primavera (copas, formas e altura diferentes) para a floresta ser variada.
-            // Outono e as "Uniques" do pacote também existem; basta arrastá-los para a lista no Inspector do perfil.
+            // Árvores folhosas da Floresta_01: lista de variações organizada por tipo (ver RebuildTreeGroups).
             ScatterProfile leafyTrees = GetOrCreate("ArvoresMobile", profile =>
             {
-                profile.prefabs = FindPrefabs(name => name.StartsWith("Opt_"), LeafyTreesSummerFolder, LeafyTreesSpringFolder);
                 profile.salt = 17;
                 profile.attemptsPerChunk = LeafyTreesAttempts;
                 profile.minSpacing = 3.5f;
@@ -60,9 +66,13 @@ namespace PROCEDURAL_GAME.EditorTools
                 profile.maxSlope = 28f;
                 profile.minScale = 0.9f;
                 profile.maxScale = 1.5f;
+                profile.sinkDepth = LeafyTreesSinkDepth;
                 profile.collision = ScatterCollision.Trunk;
                 profile.trunkRadius = 0.3f;
             });
+
+            // Só monta os grupos se o perfil ainda não tem: valores que você ajustou (altura, colisor) nunca são sobrescritos.
+            if (!leafyTrees.HasGroups) RebuildTreeGroups(leafyTrees);
 
             // Arbustos: samambaias e touceiras do pacote (verão). Sem colisão: o Player passa por dentro.
             ScatterProfile shrubs = GetOrCreate("Arbustos", profile =>
@@ -82,9 +92,9 @@ namespace PROCEDURAL_GAME.EditorTools
             });
 
             // Cada perfil entra numa categoria do menu de Desempenho. Só preenche se vazio: um nome que você mudou fica.
-            EnsureCategory(deadTrees, "Árvores");
-            EnsureCategory(leafyTrees, "Árvores");
-            EnsureCategory(shrubs, "Arbustos");
+            EnsureCategory(deadTrees, "trees", "Árvores");
+            EnsureCategory(leafyTrees, "trees", "Árvores");
+            EnsureCategory(shrubs, "shrubs", "Arbustos");
 
             // Migração de perfis criados antes: sem versões de neve e com a densidade nova. A densidade só muda se
             // ainda for um dos valores que este script já usou; se você ajustou à mão, fica como está.
@@ -97,8 +107,12 @@ namespace PROCEDURAL_GAME.EditorTools
 
             // Metade da densidade de Pedras, com outro salt para as posições não coincidirem com as do Campo.
             ScatterProfile sparseRocks = GetOrCreate("PedrasEsparsas", profile => ConfigureRocks(profile, attempts: 4, salt: 24));
-            EnsureCategory(rocks, "Rochas");
-            EnsureCategory(sparseRocks, "Rochas");
+            EnsureCategory(rocks, "rocks", "Rochas");
+            EnsureCategory(sparseRocks, "rocks", "Rochas");
+
+            // Afundamento: valores que este script já usou (0,1 e 0,03) viram o atual; ajustes seus ficam.
+            MigrateSinkDepth(deadTrees, DeadTreesSinkDepth, 0.03f);
+            MigrateSinkDepth(leafyTrees, LeafyTreesSinkDepth, 0.1f, 0.03f);
 
             // Listas anteriores montadas por este script: se o bioma ainda tiver uma delas, é seguro trocar.
             SetList(meadow, new[] { rocks },
@@ -106,6 +120,201 @@ namespace PROCEDURAL_GAME.EditorTools
             SetList(forest01, new[] { leafyTrees, shrubs });
             SetList(forest02, new[] { deadTrees, sparseRocks },
                 new[] { "ArvoresSecas", "Pedras" });
+        }
+
+        // ---- Árvores folhosas organizadas por tipo (Floresta_01) ----
+
+        private const string SpiralTreeId = "SpiralTree";
+
+        // true: usa a versão "Opt_" (1 malha + LOD) quando existe. Os prefabs de Prefabs/<estação> não têm LOD e vários são feitos
+        // de dezenas de malhas (Curved: 78), o que pesa no celular; só os tipos sem versão otimizada (Tree, young2, Jungle1)
+        // vêm de lá. Em false, todos vêm de Prefabs/ (6 variações por tipo e pacote, em vez de 3).
+        private const bool PreferOptimized = true;
+
+        // Tipo (trecho do nome do prefab) e altura inicial em metros em relação ao terreno, medida no Editor. Colisor começa em 1.
+        // 'young1' não está na lista: os prefabs eram idênticos aos de 'Tree' (mesma malha e materiais) e foram apagados.
+        private static readonly (string id, float elevation)[] TreeTypes =
+        {
+            ("5Arms", -1.0f), ("Curved", -0.7f), ("FullTree", -0.3f), ("SkinnyBunches", -0.5f), ("SkinnyTall", -0.3f),
+            ("TallThin", -1.0f), ("Tree_short", -0.5f), ("Tree_single", -1.5f), ("Tree", -0.1f),
+            ("young2", -0.1f), ("Jungle1", -10.0f), (SpiralTreeId, -1.0f)
+        };
+
+        // Pacotes de estação usados; Winter, Uniques e New Branches ficam de fora de propósito.
+        private static readonly string[] SeasonPacks = { "Autumn", "Spring", "Summer" };
+
+        // Ex.: "Sm1_young1_v2 1", "Opt_S1_5Arms_v3_00", "A2_Tree_short_v1_00". O tipo vem entre o prefixo do pacote e "_v<n>".
+        private static readonly Regex TreeNameRegex = new Regex(
+            @"^(?:Opt_)?[A-Za-z]+\d_(?<type>" + BuildTypePattern() + @")_v\d",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+        private static string BuildTypePattern()
+        {
+            List<string> ids = new List<string>();
+            foreach (var type in TreeTypes)
+            {
+                if (type.id != SpiralTreeId) ids.Add(Regex.Escape(type.id));
+            }
+
+            return string.Join("|", ids);
+        }
+
+        [MenuItem("PROCEDURAL_GAME/Rebuild Tree Groups")]
+        public static void RebuildTreeGroupsMenu()
+        {
+            ScatterProfile profile = AssetDatabase.LoadAssetAtPath<ScatterProfile>(LeafyTreesAssetPath);
+            if (profile == null)
+            {
+                Debug.LogError($"Perfil '{LeafyTreesAssetPath}' não existe. Rode PROCEDURAL_GAME > Create Procedural World primeiro.");
+                return;
+            }
+
+            RebuildTreeGroups(profile);
+        }
+
+        /// <summary>
+        /// Refaz os grupos de tipos de árvore do perfil a partir dos pacotes. Altura e colisor já existentes (por id do tipo)
+        /// são mantidos; tipos novos entram com os valores iniciais de <see cref="TreeTypes"/>.
+        /// </summary>
+        public static void RebuildTreeGroups(ScatterProfile profile)
+        {
+            Dictionary<string, ScatterProfile.PrefabGroup> previous = new Dictionary<string, ScatterProfile.PrefabGroup>();
+            if (profile.groups != null)
+            {
+                foreach (ScatterProfile.PrefabGroup group in profile.groups)
+                {
+                    if (group != null && !string.IsNullOrEmpty(group.id)) previous[group.id] = group;
+                }
+            }
+
+            List<string> ignored = new List<string>();
+            Dictionary<string, Dictionary<string, List<GameObject>>> optimizedByPack = new Dictionary<string, Dictionary<string, List<GameObject>>>();
+            Dictionary<string, Dictionary<string, List<GameObject>>> regularByPack = new Dictionary<string, Dictionary<string, List<GameObject>>>();
+
+            foreach (string pack in SeasonPacks)
+            {
+                optimizedByPack[pack] = ClassifyTreeFolder($"{MobileFvRoot}/Optimized/{pack}", ignored);
+                regularByPack[pack] = ClassifyTreeFolder($"{MobileFvRoot}/Prefabs/{pack}", ignored);
+            }
+
+            List<ScatterProfile.PrefabGroup> result = new List<ScatterProfile.PrefabGroup>();
+            List<string> report = new List<string>();
+
+            foreach (var treeType in TreeTypes)
+            {
+                string id = treeType.id;
+                float defaultElevation = treeType.elevation;
+                List<ScatterProfile.GroupVariant> variants = new List<ScatterProfile.GroupVariant>();
+                List<string> origin = new List<string>();
+
+                if (id == SpiralTreeId)
+                {
+                    foreach (GameObject prefab in FindPrefabs(name => name.StartsWith(SpiralTreeId, StringComparison.Ordinal), MiscFolder))
+                    {
+                        variants.Add(new ScatterProfile.GroupVariant { prefab = prefab, pack = "Misc" });
+                    }
+
+                    origin.Add($"Misc {variants.Count}");
+                }
+                else
+                {
+                    foreach (string pack in SeasonPacks)
+                    {
+                        List<GameObject> source = null;
+                        string kind = "Prefabs";
+
+                        if (PreferOptimized && optimizedByPack[pack].TryGetValue(id, out List<GameObject> optimized) && optimized.Count > 0)
+                        {
+                            source = optimized;
+                            kind = "Opt";
+                        }
+                        else if (regularByPack[pack].TryGetValue(id, out List<GameObject> regular))
+                        {
+                            source = regular;
+                        }
+
+                        if (source == null) continue;
+
+                        foreach (GameObject prefab in source) variants.Add(new ScatterProfile.GroupVariant { prefab = prefab, pack = pack });
+                        origin.Add($"{pack} {source.Count} [{kind}]");
+                    }
+                }
+
+                if (variants.Count == 0)
+                {
+                    report.Add($"{id}: nenhum prefab encontrado");
+                    continue;
+                }
+
+                bool had = previous.TryGetValue(id, out ScatterProfile.PrefabGroup old);
+                result.Add(new ScatterProfile.PrefabGroup
+                {
+                    id = id,
+                    displayName = id,
+                    elevation = had ? old.elevation : defaultElevation,
+                    colliderScale = had ? old.colliderScale : 1f,
+                    weight = had && old.weight > 0f ? old.weight : 1f,
+                    variants = variants.ToArray()
+                });
+
+                report.Add($"{id}: {variants.Count} variações ({string.Join(", ", origin)})");
+            }
+
+            profile.groups = result.ToArray();
+            profile.prefabs = Array.Empty<GameObject>();
+            EditorUtility.SetDirty(profile);
+            AssetDatabase.SaveAssets();
+
+            string message = $"Grupos de árvores de '{profile.name}' refeitos ({result.Count} tipos):\n" + string.Join("\n", report);
+            if (ignored.Count > 0) message += $"\nIgnorados (fora dos tipos usados): {string.Join(", ", ignored)}";
+            Debug.Log(message);
+        }
+
+        /// <summary>Agrupa os prefabs de uma pasta pelo tipo de árvore (id canônico de <see cref="TreeTypes"/>); o que não casa vai para <paramref name="ignored"/>.</summary>
+        private static Dictionary<string, List<GameObject>> ClassifyTreeFolder(string folder, List<string> ignored)
+        {
+            Dictionary<string, List<GameObject>> result = new Dictionary<string, List<GameObject>>();
+            if (!AssetDatabase.IsValidFolder(folder)) return result;
+
+            List<string> paths = new List<string>();
+            foreach (string guid in AssetDatabase.FindAssets("t:Prefab", new[] { folder })) paths.Add(AssetDatabase.GUIDToAssetPath(guid));
+            paths.Sort(string.CompareOrdinal);
+
+            foreach (string path in paths)
+            {
+                if (IsSnowAsset(path)) continue;
+
+                GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (prefab == null) continue;
+
+                Match match = TreeNameRegex.Match(prefab.name);
+                if (!match.Success)
+                {
+                    ignored.Add(prefab.name);
+                    continue;
+                }
+
+                string id = CanonicalTreeId(match.Groups["type"].Value);
+                if (!result.TryGetValue(id, out List<GameObject> list))
+                {
+                    list = new List<GameObject>();
+                    result.Add(id, list);
+                }
+
+                list.Add(prefab);
+            }
+
+            return result;
+        }
+
+        private static string CanonicalTreeId(string typeFromName)
+        {
+            foreach (var type in TreeTypes)
+            {
+                if (string.Equals(type.id, typeFromName, StringComparison.OrdinalIgnoreCase)) return type.id;
+            }
+
+            return typeFromName;
         }
 
         private static void ConfigureRocks(ScatterProfile profile, int attempts, int salt)
@@ -173,11 +382,36 @@ namespace PROCEDURAL_GAME.EditorTools
             return result.ToArray();
         }
 
-        private static void EnsureCategory(ScatterProfile profile, string category)
+        // Id (ASCII, vira chave de gravação) e nome mostrado são preenchidos separados e só se vazios: o que você mudou fica.
+        private static void EnsureCategory(ScatterProfile profile, string categoryId, string displayName)
         {
-            if (!string.IsNullOrEmpty(profile.category)) return;
+            bool changed = false;
 
-            profile.category = category;
+            if (string.IsNullOrEmpty(profile.categoryId))
+            {
+                profile.categoryId = categoryId;
+                changed = true;
+            }
+
+            if (string.IsNullOrEmpty(profile.category))
+            {
+                profile.category = displayName;
+                changed = true;
+            }
+
+            if (!changed) return;
+
+            EditorUtility.SetDirty(profile);
+            AssetDatabase.SaveAssets();
+        }
+
+        private static void MigrateSinkDepth(ScatterProfile profile, float newValue, params float[] previousDefaults)
+        {
+            bool wasDefault = false;
+            foreach (float previous in previousDefaults) wasDefault |= Mathf.Approximately(profile.sinkDepth, previous);
+            if (!wasDefault) return;
+
+            profile.sinkDepth = newValue;
             EditorUtility.SetDirty(profile);
             AssetDatabase.SaveAssets();
         }

@@ -20,7 +20,9 @@ MonoBehaviour:
   - {fileID: 230006360637513423, guid: 6905bfb07dfcac5489e6daf8e7babe92, type: 3}
   - {fileID: 8004922568447459907, guid: 0603828da9221ca4a9a54954ff8842ff, type: 3}
   - {fileID: 5605882136043868659, guid: 10d8dedacc7c7804ea3893a4d74faea1, type: 3}
+  groups: []
   salt: 11
+  categoryId: trees
   category: "\xC1rvores"
   attemptsPerChunk: 14
   minSpacing: 6
