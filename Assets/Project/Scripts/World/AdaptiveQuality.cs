@@ -8,8 +8,9 @@ namespace PROCEDURAL_GAME.World
     /// Qualidade automática: mede o FPS e, se não alcança o FPS desejado, reduz o raio de visão e a quantidade de objetos;
     /// se sobra folga, devolve qualidade aos poucos. Só age se estiver ligada no menu (Desempenho > Qualidade automática).
     ///
-    /// Níveis (0 = qualidade máxima, a escolhida pelo jogador): cada passo para baixo tira uma fração dos objetos de TODAS as
-    /// categorias (inclusive as futuras) e, nos primeiros passos, também 1 chunk de raio, até o raio mínimo.
+    /// Níveis (0 = qualidade máxima, a escolhida pelo jogador): os primeiros passos para baixo tiram um nível de sombras cada
+    /// (Alta, Média, Baixa, desligadas: é o corte que menos muda o jogo e um dos mais caros). Depois, cada passo tira uma fração
+    /// dos objetos de TODAS as categorias (inclusive as futuras) e, nos primeiros passos, também 1 chunk de raio, até o raio mínimo.
     /// Os sliders de objetos do menu continuam valendo como teto.
     ///
     /// Raio menor deixaria o fim do mundo à mostra; por isso a neblina engrossa na mesma medida (e antes do raio diminuir)
@@ -67,6 +68,9 @@ namespace PROCEDURAL_GAME.World
         private int maxLevel;
         private int level;
 
+        // Quantos níveis iniciais só reduzem as sombras (= o nível de sombras escolhido pelo jogador: 0 a 3).
+        private int shadowLevels;
+
         private int appliedRadius;
         private int wantedRadius;
         private bool fogInitialized;
@@ -97,10 +101,12 @@ namespace PROCEDURAL_GAME.World
             baseRadius = world.BaseViewRadius;
             minRadius = Mathf.Min(baseRadius, Mathf.Max(2, minViewRadius));
 
-            // Pelo menos o necessário para o raio chegar ao mínimo, e o suficiente para os objetos chegarem ao fator mínimo.
+            // Pelo menos o necessário para o raio chegar ao mínimo, e o suficiente para os objetos chegarem ao fator mínimo,
+            // mais os níveis que só tiram sombras.
+            shadowLevels = PerformanceSettings.GetShadowLevel();
             int objectLevels = Mathf.CeilToInt((1f - minObjectFactor) / factorStep);
             int radiusLevels = Mathf.Max(0, 2 * (baseRadius - minRadius) - 1);
-            maxLevel = Mathf.Max(objectLevels, radiusLevels);
+            maxLevel = shadowLevels + Mathf.Max(objectLevels, radiusLevels);
 
             level = Mathf.Clamp(PerformanceSettings.GetSavedAutoLevel(world.Biome.name), 0, maxLevel);
             currentRaiseDelay = raiseDelay;
@@ -108,6 +114,7 @@ namespace PROCEDURAL_GAME.World
 
             // O primeiro nível já vale na criação dos primeiros chunks (Start do WorldGenerator).
             PerformanceSettings.AutoQualityFactor = FactorFor(level);
+            PerformanceSettings.AutoShadowReduction = ShadowCutFor(level);
             appliedRadius = RadiusFor(level);
             wantedRadius = appliedRadius;
             world.SetViewRadiusOverride(appliedRadius);
@@ -127,20 +134,26 @@ namespace PROCEDURAL_GAME.World
             UpdateRadiusAndFog(dt);
             Measure(dt);
 
-            FpsCounter.ExtraInfo = $"Auto: nível {level}/{maxLevel}  raio {appliedRadius}  objetos {PerformanceSettings.AutoQualityFactor * 100f:0}%";
+            FpsCounter.ExtraInfo = $"Auto: nível {level}/{maxLevel}  sombras {PerformanceSettings.EffectiveShadowLevel}  raio {appliedRadius}  objetos {PerformanceSettings.AutoQualityFactor * 100f:0}%";
         }
 
         private void OnDestroy()
         {
             // O fator é estático: sem isto o menu ou o próximo jogo herdariam o corte.
             PerformanceSettings.AutoQualityFactor = 1f;
+            PerformanceSettings.AutoShadowReduction = 0;
             FpsCounter.ExtraInfo = null;
         }
 
-        private float FactorFor(int lvl) => Mathf.Max(minObjectFactor, 1f - factorStep * lvl);
+        // Níveis que sobram depois dos que só tiram sombra: os de objetos e raio contam a partir daí.
+        private int WorldLevel(int lvl) => Mathf.Max(0, lvl - shadowLevels);
 
-        // O raio cai primeiro: 1 chunk no nível 1, outro no nível 3, etc., até o mínimo.
-        private int RadiusFor(int lvl) => baseRadius - Mathf.Min(baseRadius - minRadius, (lvl + 1) / 2);
+        private int ShadowCutFor(int lvl) => Mathf.Min(lvl, shadowLevels);
+
+        private float FactorFor(int lvl) => Mathf.Max(minObjectFactor, 1f - factorStep * WorldLevel(lvl));
+
+        // O raio cai primeiro: 1 chunk no primeiro nível de mundo, outro no terceiro, etc., até o mínimo.
+        private int RadiusFor(int lvl) => baseRadius - Mathf.Min(baseRadius - minRadius, (WorldLevel(lvl) + 1) / 2);
 
         private float FogFor(int radius)
         {
@@ -240,6 +253,9 @@ namespace PROCEDURAL_GAME.World
             PerformanceSettings.Save();
 
             wantedRadius = RadiusFor(level);
+
+            // As sombras mudam na hora (o ShadowController confere todo frame); não há o que refazer nos chunks.
+            PerformanceSettings.AutoShadowReduction = ShadowCutFor(level);
 
             if (factorChanged)
             {

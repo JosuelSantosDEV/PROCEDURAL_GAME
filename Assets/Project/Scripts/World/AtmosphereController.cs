@@ -16,9 +16,6 @@ namespace PROCEDURAL_GAME.World
         [Tooltip("Câmera que recebe a cor do céu. Se vazio, usa a Main Camera.")]
         [SerializeField] private Camera targetCamera;
 
-        [Tooltip("Sombras dinâmicas da luz direcional. Desligadas por enquanto: ficaram quadradas no celular e custam caro. O shader do terreno também não as usa.")]
-        [SerializeField] private bool dynamicShadows;
-
         private void Start()
         {
             BiomeProfile biome = GetComponent<WorldGenerator>().Biome;
@@ -42,7 +39,7 @@ namespace PROCEDURAL_GAME.World
             {
                 light.color = biome.lightColor;
                 light.intensity = biome.lightIntensity;
-                light.shadows = dynamicShadows ? LightShadows.Soft : LightShadows.None;
+                // As sombras da luz são controladas pelo ShadowController (nível escolhido no menu Desempenho).
             }
 
             // Céu = cor da neblina: assim o terreno distante some no fundo sem linha de horizonte.

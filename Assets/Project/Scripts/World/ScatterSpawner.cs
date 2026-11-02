@@ -16,6 +16,10 @@ namespace PROCEDURAL_GAME.World
         private readonly Dictionary<(ScatterProfile, GameObject), Stack<ScatterInstance>> pools =
             new Dictionary<(ScatterProfile, GameObject), Stack<ScatterInstance>>();
 
+        // Todas as instâncias já criadas (ativas e no pool): o nível de sombras muda para todas de uma vez.
+        private readonly List<ScatterInstance> allInstances = new List<ScatterInstance>();
+        private int shadowLevel = Core.PerformanceSettings.EffectiveShadowLevel;
+
         // Reaproveitada a cada chunk para não gerar lixo de memória.
         private readonly List<ScatterPlacement> placements = new List<ScatterPlacement>();
 
@@ -68,6 +72,15 @@ namespace PROCEDURAL_GAME.World
             instances.Clear();
         }
 
+        /// <summary>Muda quais objetos projetam sombra (cada perfil define a partir de que nível).</summary>
+        public void SetShadowLevel(int level)
+        {
+            if (level == shadowLevel) return;
+
+            shadowLevel = level;
+            foreach (ScatterInstance instance in allInstances) instance.SetShadowLevel(level);
+        }
+
         private ScatterInstance Acquire(ScatterProfile profile, GameObject prefab)
         {
             var key = (profile, prefab);
@@ -78,7 +91,11 @@ namespace PROCEDURAL_GAME.World
                 pools.Add(key, pool);
             }
 
-            return pool.Count > 0 ? pool.Pop() : new ScatterInstance(profile, prefab, staging, root);
+            if (pool.Count > 0) return pool.Pop();
+
+            ScatterInstance created = new ScatterInstance(profile, prefab, staging, root, shadowLevel);
+            allInstances.Add(created);
+            return created;
         }
     }
 }

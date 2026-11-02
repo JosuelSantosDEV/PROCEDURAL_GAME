@@ -73,6 +73,39 @@ namespace PROCEDURAL_GAME.Core
 
         public static void SetShowFpsCounter(bool show) => PlayerPrefs.SetInt(ShowFpsCounterKey, show ? 1 : 0);
 
+        // Sombras em tempo real (luz direcional): 0 = desligadas; 1 = Baixa (só árvores, sombra dura, curta distância);
+        // 2 = Média (árvores e rochas, sombra suave); 3 = Alta (maior distância). Cada objeto decide a partir de que nível
+        // projeta sombra (campo 'Cast Shadows From Level' do ScatterProfile).
+        public const int ShadowOff = 0;
+        public const int ShadowLow = 1;
+        public const int ShadowMedium = 2;
+        public const int ShadowHigh = 3;
+        public const int DefaultShadowLevel = ShadowLow;
+
+        private const string ShadowLevelKey = "shadow.level";
+
+        // -1 = ainda não lido do PlayerPrefs (é lido todo frame pelo ShadowController).
+        private static int shadowLevelCache = -1;
+
+        /// <summary>Nível de sombras escolhido pelo jogador (é o teto da qualidade automática).</summary>
+        public static int GetShadowLevel()
+        {
+            if (shadowLevelCache < 0) shadowLevelCache = Mathf.Clamp(PlayerPrefs.GetInt(ShadowLevelKey, DefaultShadowLevel), ShadowOff, ShadowHigh);
+            return shadowLevelCache;
+        }
+
+        public static void SetShadowLevel(int level)
+        {
+            shadowLevelCache = Mathf.Clamp(level, ShadowOff, ShadowHigh);
+            PlayerPrefs.SetInt(ShadowLevelKey, shadowLevelCache);
+        }
+
+        /// <summary>Quantos níveis de sombra a qualidade automática tirou (as sombras são o primeiro item a reduzir). Não é gravado.</summary>
+        public static int AutoShadowReduction { get; set; }
+
+        /// <summary>Nível de sombras que vale agora: a escolha do jogador menos o corte da qualidade automática.</summary>
+        public static int EffectiveShadowLevel => Mathf.Max(ShadowOff, GetShadowLevel() - AutoShadowReduction);
+
         // Qualidade automática: o jogo mede o FPS e ajusta raio de visão e quantidade de objetos para chegar no FPS desejado.
         public const int MinAutoFps = 15;
         public const int MaxAutoFps = 60;
@@ -102,13 +135,15 @@ namespace PROCEDURAL_GAME.Core
 
         public static void SetSavedAutoLevel(string biomeName, int level) => PlayerPrefs.SetInt(AutoLevelKeyPrefix + biomeName, level);
 
-        /// <summary>Apaga as escolhas de FPS (alvo, contador e qualidade automática): voltam a valer os valores da cena.</summary>
+        /// <summary>Apaga as escolhas gerais (FPS alvo, contador, qualidade automática e sombras): voltam a valer os valores da cena.</summary>
         public static void ResetGeneral()
         {
             PlayerPrefs.DeleteKey(TargetFpsKey);
             PlayerPrefs.DeleteKey(ShowFpsCounterKey);
             PlayerPrefs.DeleteKey(AutoQualityKey);
             PlayerPrefs.DeleteKey(AutoFpsKey);
+            PlayerPrefs.DeleteKey(ShadowLevelKey);
+            shadowLevelCache = -1;
         }
 
         /// <summary>Grava no disco. Chamar ao sair da tela de opções ou iniciar o jogo (PlayerPrefs só persiste ao salvar/fechar).</summary>
@@ -120,6 +155,8 @@ namespace PROCEDURAL_GAME.Core
         {
             densities.Clear();
             AutoQualityFactor = 1f;
+            AutoShadowReduction = 0;
+            shadowLevelCache = -1;
         }
     }
 }

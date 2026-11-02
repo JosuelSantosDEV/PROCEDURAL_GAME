@@ -13,19 +13,19 @@ MonoBehaviour:
   m_Name: Arbustos
   m_EditorClassIdentifier: 
   prefabs:
-  - {fileID: 5934389985674958905, guid: 6ca98138a24dcba4794240a2ce655de0, type: 3}
-  - {fileID: 6823157465808746501, guid: 78896d177412fda41b9bc612821c96f6, type: 3}
-  - {fileID: 6093055965503814416, guid: a342d9aa884f84a448e16bc40d5562c3, type: 3}
-  - {fileID: 4281376846882751550, guid: 3fcfa49b8c8a7ef4b9d7d4f6b542f34c, type: 3}
-  - {fileID: 1992134791771612835, guid: 8c1d63f76521abd48a9adcd854bcf2d0, type: 3}
-  - {fileID: 9085843454159422071, guid: 6ba9c39a65d24c347aa03c168bd96c11, type: 3}
-  - {fileID: 403936280186497736, guid: bb389b07bc521e34b9d34abdfc497fca, type: 3}
-  - {fileID: 8155575194279524966, guid: 1096640bd6be25e41b34f3949e3b10da, type: 3}
-  - {fileID: 1480004576672099667, guid: 43d006e54c14e80489a09fefb2d49847, type: 3}
-  - {fileID: 1462214739734241635, guid: 4de24f7d7c636c342a8db42c73159892, type: 3}
-  - {fileID: 5941938710848808109, guid: f66251e2e99419244a3e72f341b50beb, type: 3}
-  - {fileID: 8495748984823069617, guid: 3165a04d38b8a3d4fb27f4f1bbe99a92, type: 3}
-  - {fileID: 5414391826843963202, guid: 2fd6f16ed3833394e90bebae04541a2e, type: 3}
+  - {fileID: 1000994542435578643, guid: 79985a1c36ad509408c3febd694df7c5, type: 3}
+  - {fileID: 702173693910226493, guid: 04d3e4b6657acfb48bb0b86f7302a2a2, type: 3}
+  - {fileID: 4966468410712685786, guid: e177375be06b4644a977b5c8dedcdec5, type: 3}
+  - {fileID: 93920583777805423, guid: 8dabc2d0ae0243e49904a6b499e8241a, type: 3}
+  - {fileID: 4752043852272885954, guid: 22dcb6922140ce548ab67ff76a47626a, type: 3}
+  - {fileID: 1201072792093048289, guid: c180bf77a9c14124e99063e95ecf9424, type: 3}
+  - {fileID: 514336134134667524, guid: 14dc39ac6d730a649a3d19c06a8c038d, type: 3}
+  - {fileID: 2545398170917647655, guid: 76318f779195a3349b853dfe427df74f, type: 3}
+  - {fileID: 5332436151714361041, guid: 9f2b2ebad4412274e848b719bd3bffd8, type: 3}
+  - {fileID: 6772376980048470258, guid: 4848d65a9876b9d4aa14691de33cc73c, type: 3}
+  - {fileID: 4990579847432305695, guid: a18b8cca1a4df4b4481026fa6b49ee88, type: 3}
+  - {fileID: 2582781859761832898, guid: 00a34e9cc84c3ce41b8b362499ead9cf, type: 3}
+  groups: []
   salt: 31
   categoryId: shrubs
   category: Arbustos
@@ -40,46 +40,6 @@ MonoBehaviour:
   maxScale: 1.5
   alignToSurface: 0
   sinkDepth: 0.05
+  castShadowsFromLevel: 0
   collision: 0
   trunkRadius: 0.35
-  trunkRadiusScale: 1
-  footprints:
-  - baseRadius: 1.0380965
-    trunkRadius: 0.9024034
-    trunkCenter: {x: 0.39155775, y: 0.22368875}
-  - baseRadius: 1.2154515
-    trunkRadius: 1.1152191
-    trunkCenter: {x: -0.014506733, y: 0.8684258}
-  - baseRadius: 1.085357
-    trunkRadius: 1.085357
-    trunkCenter: {x: -0.22285631, y: -1.5401788}
-  - baseRadius: 1.2659655
-    trunkRadius: 1.2659655
-    trunkCenter: {x: -0.04470268, y: -0.65465504}
-  - baseRadius: 1.3198248
-    trunkRadius: 1.3198248
-    trunkCenter: {x: -0.09970477, y: -0.11992582}
-  - baseRadius: 1.3198248
-    trunkRadius: 1.3198248
-    trunkCenter: {x: -0.09970477, y: -0.11992582}
-  - baseRadius: 1.1410686
-    trunkRadius: 1.1410686
-    trunkCenter: {x: -0.0031149287, y: 0.019248253}
-  - baseRadius: 0.84796137
-    trunkRadius: 0.84796137
-    trunkCenter: {x: 0.43738157, y: 0.2680575}
-  - baseRadius: 1.2154514
-    trunkRadius: 1.1152191
-    trunkCenter: {x: -0.014506793, y: 0.8684258}
-  - baseRadius: 1.085357
-    trunkRadius: 1.085357
-    trunkCenter: {x: -0.22285631, y: -1.5401788}
-  - baseRadius: 1.2659655
-    trunkRadius: 1.2659655
-    trunkCenter: {x: -0.04470268, y: -0.65465504}
-  - baseRadius: 1.3198248
-    trunkRadius: 1.3198248
-    trunkCenter: {x: -0.09970477, y: -0.11992582}
-  - baseRadius: 1.1410686
-    trunkRadius: 1.1410686
-    trunkCenter: {x: -0.0031149287, y: 0.019248253}

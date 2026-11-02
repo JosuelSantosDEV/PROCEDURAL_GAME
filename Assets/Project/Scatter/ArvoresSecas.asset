@@ -35,5 +35,6 @@ MonoBehaviour:
   maxScale: 1.3
   alignToSurface: 0
   sinkDepth: 0.1
+  castShadowsFromLevel: 1
   collision: 1
   trunkRadius: 0.4

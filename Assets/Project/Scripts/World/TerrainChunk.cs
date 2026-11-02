@@ -32,9 +32,10 @@ namespace PROCEDURAL_GAME.World
             gameObject.GetComponent<MeshFilter>().sharedMesh = mesh;
             MeshRenderer meshRenderer = gameObject.GetComponent<MeshRenderer>();
             meshRenderer.sharedMaterial = material;
-            // Sombras dinâmicas desligadas por enquanto: o terreno não projeta nem recebe (poupa processamento no celular).
+            // O terreno só RECEBE sombras (das árvores e pedras); não projeta, o que poupa o mapa de sombras. Se as sombras
+            // estiverem desligadas, o shader nem as calcula (a variante sem sombras é usada).
             meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            meshRenderer.receiveShadows = false;
+            meshRenderer.receiveShadows = true;
             meshCollider = gameObject.GetComponent<MeshCollider>();
 
             gameObject.SetActive(false);

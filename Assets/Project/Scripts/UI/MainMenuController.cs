@@ -247,6 +247,7 @@ namespace PROCEDURAL_GAME.UI
             else CreateTargetFpsRow();
 
             CreateFpsCounterRow();
+            CreateShadowRow();
             CreateSectionTitle(PerformanceSettings.GetAutoQuality() ? "Objetos (máximo)" : "Objetos");
 
             categories.Clear();
@@ -303,6 +304,45 @@ namespace PROCEDURAL_GAME.UI
         {
             CreateToggleRow("Contador de FPS", PerformanceSettings.GetShowFpsCounter(PerformanceSettings.DefaultShowFpsCounter),
                 PerformanceSettings.SetShowFpsCounter);
+        }
+
+        // Sombras: 0 a 3. Com a qualidade automática, é o teto (ela reduz as sombras primeiro).
+        private void CreateShadowRow()
+        {
+            int level = PerformanceSettings.GetShadowLevel();
+            string label = PerformanceSettings.GetAutoQuality() ? "Sombras (máx.)" : "Sombras";
+
+            Text hint = null;
+            CreateSliderRow(label, PerformanceSettings.ShadowHigh, level, FormatShadows, newLevel =>
+            {
+                PerformanceSettings.SetShadowLevel(newLevel);
+                if (hint != null) hint.text = ShadowHint(newLevel);
+            });
+
+            hint = UiKit.CreateText(performanceContent, "ShadowHint", ShadowHint(level), 26, TextAnchor.UpperLeft, UiKit.MutedTextColor);
+            UiKit.SetLayout(hint.gameObject, preferredHeight: 80f);
+        }
+
+        private static string ShadowHint(int level)
+        {
+            switch (level)
+            {
+                case PerformanceSettings.ShadowLow: return "Baixa: só as árvores projetam sombra, perto de você. A mais barata.";
+                case PerformanceSettings.ShadowMedium: return "Média: árvores e rochas, com sombra suave e um pouco mais longe.";
+                case PerformanceSettings.ShadowHigh: return "Alta: o maior alcance de sombras. Pesa mais no celular.";
+                default: return "Sem sombras: o jogo fica mais leve e mais plano.";
+            }
+        }
+
+        private static string FormatShadows(int level)
+        {
+            switch (level)
+            {
+                case PerformanceSettings.ShadowLow: return "Baixa";
+                case PerformanceSettings.ShadowMedium: return "Média";
+                case PerformanceSettings.ShadowHigh: return "Alta";
+                default: return "Desligadas";
+            }
         }
 
         // Liga a qualidade automática e troca as linhas de FPS (por isso refaz a lista).
@@ -375,7 +415,7 @@ namespace PROCEDURAL_GAME.UI
             UiKit.SetLayout(label.gameObject, preferredWidth: RowLabelWidth, preferredHeight: 100f);
 
             Text value = UiKit.CreateText(row, "Value", format(currentSteps), 40, TextAnchor.MiddleRight, UiKit.AccentColor);
-            UiKit.SetLayout(value.gameObject, preferredWidth: 170f, preferredHeight: 100f);
+            UiKit.SetLayout(value.gameObject, preferredWidth: 230f, preferredHeight: 100f);
 
             UiKit.CreateSlider(row, "Slider", 0, maxSteps, currentSteps, newValue =>
             {

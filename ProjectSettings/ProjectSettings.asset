@@ -803,7 +803,10 @@ PlayerSettings:
   webGLMemoryGeometricGrowthStep: 0.2
   webGLMemoryGeometricGrowthCap: 96
   webGLPowerPreference: 2
-  scriptingDefineSymbols: {}
+  scriptingDefineSymbols:
+    Android: DEV_TOOLS
+    Standalone: DEV_TOOLS
+    iPhone: DEV_TOOLS
   additionalCompilerArguments: {}
   platformArchitecture: {}
   scriptingBackend:

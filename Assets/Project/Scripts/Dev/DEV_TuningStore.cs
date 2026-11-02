@@ -1,4 +1,4 @@
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || DEV_TOOLS
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;

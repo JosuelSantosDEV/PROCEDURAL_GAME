@@ -1,8 +1,8 @@
 namespace PROCEDURAL_GAME.World
 {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || DEV_TOOLS
     /// <summary>
-    /// Só existe no Editor e em Development Build: permite à ferramenta de calibração (pasta Scripts/Dev) trocar,
+    /// Só existe no Editor e em builds com o símbolo DEV_TOOLS (menu PROCEDURAL_GAME > Build): permite à ferramenta de calibração (pasta Scripts/Dev) trocar,
     /// sem mexer nos assets, quais tipos aparecem, a altura e o colisor de cada grupo.
     /// </summary>
     public interface IScatterTuningSource
@@ -19,7 +19,7 @@ namespace PROCEDURAL_GAME.World
     /// </summary>
     public static class ScatterTuning
     {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || DEV_TOOLS
         /// <summary>Preenchido pela ferramenta de calibração; nulo = valem os valores do perfil.</summary>
         public static IScatterTuningSource Source;
 #endif
@@ -29,7 +29,7 @@ namespace PROCEDURAL_GAME.World
         {
             get
             {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || DEV_TOOLS
                 return Source != null;
 #else
                 return false;
@@ -39,7 +39,7 @@ namespace PROCEDURAL_GAME.World
 
         public static bool IsEnabled(ScatterProfile profile, in ScatterProfile.Variant variant)
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || DEV_TOOLS
             if (Source != null) return Source.IsEnabled(profile, in variant);
 #endif
             return true;
@@ -47,7 +47,7 @@ namespace PROCEDURAL_GAME.World
 
         public static float GetElevation(ScatterProfile profile, int group)
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || DEV_TOOLS
             if (Source != null) return Source.GetElevation(profile, group);
 #endif
             return profile.GetElevation(group);
@@ -55,7 +55,7 @@ namespace PROCEDURAL_GAME.World
 
         public static float GetColliderScale(ScatterProfile profile, int group)
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || DEV_TOOLS
             if (Source != null) return Source.GetColliderScale(profile, group);
 #endif
             return profile.GetColliderScale(group);

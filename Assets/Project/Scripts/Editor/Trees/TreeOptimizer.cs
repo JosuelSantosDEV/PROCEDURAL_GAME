@@ -1,0 +1,723 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using UnityEditor;
+using UnityEngine;
+using Object = UnityEngine.Object;
+
+namespace PROCEDURAL_GAME.EditorTools
+{
+    /// <summary>
+    /// Etapas 1 e 2 da otimização das árvores do Mobile_FV. Lê cada prefab de Assets/Mobile_FV/Prefabs/&lt;pacote&gt; e grava em
+    /// Assets/Project/Trees/&lt;pacote&gt; um prefab NOVO e independente:
+    /// - LOD0: todas as malhas da árvore juntas em uma só (um submesh por material), com a mesma geometria e UVs do original.
+    ///   Antes eram dezenas de renderers (Curved: 78; coníferas: 450); agora é 1 renderer e, nas árvores, 1 draw call.
+    /// - LOD1: versão simplificada gerada automaticamente: a madeira (grandes componentes de malha) fica igual e os cartões
+    ///   de folhas (componentes pequenos) são reduzidos a uma fração, com os que sobram ampliados para manter a cobertura.
+    /// - LODGroup por distância (constantes no topo): LOD0 até 40 m, LOD1 até 110 m (arbustos: some a 70 m), depois some.
+    /// Prefabs duplicados (mesma malha, materiais e posições) não são gerados. Nenhum original é alterado ou apagado.
+    /// </summary>
+    public static class TreeOptimizer
+    {
+        private const string SourceFbx = "Assets/Mobile_FV/Resources/SourceMeshes.fbx";
+        private const string SourceRoot = "Assets/Mobile_FV/Prefabs";
+        private const string OutputRoot = "Assets/Project/Trees";
+
+        // Pastas de origem processadas ('New Branches' fica de fora de propósito).
+        private static readonly string[] Packs = { "Autumn", "Spring", "Summer", "Winter", "Misc", "GroundCover" };
+
+        // ---- LOD por DISTÂNCIA, em metros (o LODGroup guarda a altura do objeto na tela; a conversão é feita por prefab) ----
+        // Valem para FOV vertical 60 (o da câmera do jogo) e QualitySettings.lodBias = 1 (nível Balanced, o do Android):
+        // lodBias 2 dobra as distâncias, 0,4 as reduz a 40%. Para mudar depois de gerado, rode o menu 3 de novo.
+        private const float ReferenceFov = 60f;
+        private const float TreeLod1Distance = 40f;         // daqui para a frente a árvore usa a versão simplificada (LOD1)
+        private const float TreeCullDistance = 110f;        // daqui para a frente some (acima do alcance da neblina da Floresta_01)
+        private const float GroundCoverCullDistance = 70f;  // arbustos são muitos e pequenos: somem antes
+
+        // ---- Simplificação do LOD1 ----
+        private const int SmallComponentTriangles = 40;  // componente com até isto = cartão de folha (pode ser removido)
+        private const float FoliageKeepFraction = 0.4f;  // fração dos cartões de folha que fica no LOD1
+        private const float MaxCardScale = 1.8f;         // teto da ampliação dos cartões que ficam
+        private const int MinTrianglesForLod1 = 400;     // árvore menor que isto não ganha LOD1 (só some a distância)
+        private const float MaxLod1Ratio = 0.75f;        // LOD1 só vale se tiver no máximo esta fração dos triângulos do LOD0
+
+        // Nomes usados no modo de teste (poucas árvores para conferir o resultado antes de converter tudo).
+        private static readonly HashSet<string> TestNames = new HashSet<string>
+        {
+            "Sm1_Curved_v1_00", "Sm1_Tree_single_v1_00", "Sm1_Tree_v1_00", "Conifer1_v1_00", "SpiralTree", "Sm1_fernPlant1"
+        };
+
+        // ---------------------------------------------------------------------------------------------------------------
+        // Menus
+        // ---------------------------------------------------------------------------------------------------------------
+
+        [MenuItem("PROCEDURAL_GAME/Trees/1 - Enable Read-Write on source FBX")]
+        public static void EnableReadWrite()
+        {
+            ModelImporter importer = AssetImporter.GetAtPath(SourceFbx) as ModelImporter;
+            if (importer == null)
+            {
+                Debug.LogError($"Não achei '{SourceFbx}'. Ele só pode ser apagado depois de gerar as árvores novas.");
+                return;
+            }
+
+            if (importer.isReadable)
+            {
+                Debug.Log("Read/Write do SourceMeshes.fbx já está ligado.");
+                return;
+            }
+
+            importer.isReadable = true;
+            importer.SaveAndReimport();
+            Debug.Log("Read/Write ligado em SourceMeshes.fbx (necessário para ler as malhas no Editor).");
+        }
+
+        [MenuItem("PROCEDURAL_GAME/Trees/2 - Build Test (6 trees)")]
+        public static void BuildTest() => Build(name => TestNames.Contains(name), "teste");
+
+        [MenuItem("PROCEDURAL_GAME/Trees/3 - Build ALL")]
+        public static void BuildAll()
+        {
+            if (!EditorUtility.DisplayDialog("Gerar todas as árvores otimizadas",
+                    "Vai gerar centenas de prefabs e malhas em Assets/Project/Trees. Os originais não são alterados. Continuar?", "Gerar", "Cancelar"))
+            {
+                return;
+            }
+
+            Build(name => true, "completo");
+        }
+
+        // ---------------------------------------------------------------------------------------------------------------
+        // Pipeline
+        // ---------------------------------------------------------------------------------------------------------------
+
+        private sealed class Piece
+        {
+            public Mesh Mesh;
+            public int SubMesh;
+            public Material Material;
+            public Matrix4x4 Matrix;
+        }
+
+        private sealed class MeshData
+        {
+            public Vector3[] Vertices;
+            public Vector3[] Normals;
+            public Vector4[] Tangents;
+            public Vector2[] Uvs;
+            public int[][] Triangles;
+        }
+
+        /// <summary>Todas as malhas da árvore em uma lista só de vértices, com uma lista de triângulos por material.</summary>
+        private sealed class Geometry
+        {
+            public readonly List<Vector3> Vertices = new List<Vector3>();
+            public readonly List<Vector3> Normals = new List<Vector3>();
+            public readonly List<Vector4> Tangents = new List<Vector4>();
+            public readonly List<Vector2> Uvs = new List<Vector2>();
+            public readonly List<Material> Materials = new List<Material>();
+            public readonly List<List<int>> Triangles = new List<List<int>>();
+            public bool MissingTangents;
+            public int MirroredPieces;
+
+            public int TriangleCount => Triangles.Sum(t => t.Count) / 3;
+        }
+
+        private static readonly Dictionary<Mesh, MeshData> MeshCache = new Dictionary<Mesh, MeshData>();
+
+        private static void Build(Func<string, bool> nameFilter, string mode)
+        {
+            ModelImporter importer = AssetImporter.GetAtPath(SourceFbx) as ModelImporter;
+            if (importer != null && !importer.isReadable)
+            {
+                Debug.LogError("Rode antes o menu PROCEDURAL_GAME > Trees > 1 - Enable Read-Write on source FBX.");
+                return;
+            }
+
+            StringBuilder report = new StringBuilder();
+            report.AppendLine($"GERAÇÃO DE ÁRVORES OTIMIZADAS ({mode}) — {DateTime.Now:yyyy-MM-dd HH:mm}");
+            report.AppendLine("origem -> destino | peças -> renderers | triângulos LOD0 / LOD1 | vértices | observações");
+
+            int built = 0, skippedDuplicates = 0, failed = 0;
+            MeshCache.Clear();
+
+            try
+            {
+                List<string> sources = CollectSources(nameFilter);
+
+                // Duplicatas: mesma pasta, mesma assinatura (malhas + materiais + posições).
+                Dictionary<string, List<(string path, string signature)>> bySignature = new Dictionary<string, List<(string, string)>>();
+                Dictionary<string, List<Piece>> piecesByPath = new Dictionary<string, List<Piece>>();
+                Dictionary<string, List<string>> notesByPath = new Dictionary<string, List<string>>();
+
+                for (int i = 0; i < sources.Count; i++)
+                {
+                    string path = sources[i];
+                    if (EditorUtility.DisplayCancelableProgressBar("Lendo árvores", path, i / (float)sources.Count)) return;
+
+                    List<Piece> pieces = new List<Piece>();
+                    List<string> notes = new List<string>();
+                    notesByPath[path] = notes;
+
+                    GameObject root = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                    if (root == null || !TryCollect(root, pieces, notes))
+                    {
+                        failed++;
+                        report.AppendLine($"{path} -> (ignorado) | {string.Join("; ", notes)}");
+                        continue;
+                    }
+
+                    piecesByPath[path] = pieces;
+                    string key = Path.GetDirectoryName(path).Replace('\\', '/') + "#" + Signature(pieces);
+                    if (!bySignature.TryGetValue(key, out var list)) bySignature[key] = list = new List<(string, string)>();
+                    list.Add((path, key));
+                }
+
+                HashSet<string> skip = new HashSet<string>();
+                foreach (List<(string path, string signature)> group in bySignature.Values.Where(g => g.Count > 1))
+                {
+                    // Fica o de nome sem "young1" e mais curto (ex.: Tree em vez de young1).
+                    List<string> ordered = group.Select(g => g.path)
+                        .OrderBy(p => Path.GetFileNameWithoutExtension(p).Contains("young1") ? 1 : 0)
+                        .ThenBy(p => Path.GetFileNameWithoutExtension(p).Length)
+                        .ThenBy(p => p, StringComparer.Ordinal).ToList();
+
+                    foreach (string duplicate in ordered.Skip(1))
+                    {
+                        skip.Add(duplicate);
+                        skippedDuplicates++;
+                        report.AppendLine($"{duplicate} -> (duplicata de {Path.GetFileNameWithoutExtension(ordered[0])}, não gerado)");
+                    }
+                }
+
+                HashSet<string> usedOutputs = new HashSet<string>();
+                List<string> toBuild = piecesByPath.Keys.Where(p => !skip.Contains(p)).OrderBy(p => p, StringComparer.Ordinal).ToList();
+
+                for (int i = 0; i < toBuild.Count; i++)
+                {
+                    string path = toBuild[i];
+                    if (EditorUtility.DisplayCancelableProgressBar("Gerando árvores otimizadas", path, i / (float)toBuild.Count)) break;
+
+                    try
+                    {
+                        string line = BuildOne(path, piecesByPath[path], usedOutputs);
+                        report.AppendLine(line);
+                        built++;
+                    }
+                    catch (Exception exception)
+                    {
+                        failed++;
+                        report.AppendLine($"{path} -> FALHOU: {exception.Message}");
+                        Debug.LogException(exception);
+                    }
+                }
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+                MeshCache.Clear();
+                AssetDatabase.SaveAssets();
+                AssetDatabase.Refresh();
+            }
+
+            report.AppendLine();
+            report.AppendLine($"Gerados: {built} | duplicatas ignoradas: {skippedDuplicates} | falhas/ignorados: {failed}");
+
+            string file = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "About", "TreeBuild.txt"));
+            Directory.CreateDirectory(Path.GetDirectoryName(file));
+            File.WriteAllText(file, report.ToString(), new UTF8Encoding(false));
+
+            Debug.Log($"Árvores otimizadas ({mode}): {built} geradas, {skippedDuplicates} duplicatas ignoradas, {failed} falhas. Relatório em {file}");
+        }
+
+        private static List<string> CollectSources(Func<string, bool> nameFilter)
+        {
+            List<string> result = new List<string>();
+            string[] folders = Packs.Select(p => $"{SourceRoot}/{p}").Where(AssetDatabase.IsValidFolder).ToArray();
+
+            foreach (string guid in AssetDatabase.FindAssets("t:Prefab", folders))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (nameFilter(Path.GetFileNameWithoutExtension(path))) result.Add(path);
+            }
+
+            return result;
+        }
+
+        // ---------------------------------------------------------------------------------------------------------------
+        // Leitura do prefab original
+        // ---------------------------------------------------------------------------------------------------------------
+
+        private static bool TryCollect(GameObject root, List<Piece> pieces, List<string> notes)
+        {
+            Matrix4x4 toRoot = root.transform.worldToLocalMatrix;
+
+            foreach (Renderer renderer in root.GetComponentsInChildren<Renderer>(true))
+            {
+                if (!renderer.enabled || !IsActiveInPrefab(renderer.transform, root.transform)) continue;
+
+                if (renderer is SkinnedMeshRenderer)
+                {
+                    notes.Add("tem SkinnedMeshRenderer (não suportado)");
+                    return false;
+                }
+
+                if (!(renderer is MeshRenderer)) continue;
+
+                MeshFilter filter = renderer.GetComponent<MeshFilter>();
+                Mesh mesh = filter != null ? filter.sharedMesh : null;
+                if (mesh == null) continue;
+
+                if (!mesh.isReadable)
+                {
+                    notes.Add($"malha '{mesh.name}' não é legível (rode o menu 1)");
+                    return false;
+                }
+
+                Material[] materials = renderer.sharedMaterials;
+                Matrix4x4 matrix = toRoot * renderer.transform.localToWorldMatrix;
+
+                // Com menos materiais que submeshes, o Unity não desenha os submeshes que sobram.
+                for (int sub = 0; sub < mesh.subMeshCount && sub < materials.Length; sub++)
+                {
+                    if (materials[sub] != null) pieces.Add(new Piece { Mesh = mesh, SubMesh = sub, Material = materials[sub], Matrix = matrix });
+                }
+            }
+
+            if (pieces.Count == 0) notes.Add("nenhuma malha visível");
+            return pieces.Count > 0;
+        }
+
+        private static bool IsActiveInPrefab(Transform transform, Transform root)
+        {
+            for (Transform current = transform; current != null; current = current.parent)
+            {
+                if (!current.gameObject.activeSelf) return false;
+                if (current == root) break;
+            }
+
+            return true;
+        }
+
+        private static string Signature(List<Piece> pieces)
+        {
+            List<string> parts = new List<string>(pieces.Count);
+            foreach (Piece piece in pieces)
+            {
+                Vector3 position = piece.Matrix.GetColumn(3);
+                parts.Add($"{IdOf(piece.Mesh)}#{piece.SubMesh}|{IdOf(piece.Material)}|{position.x:F3},{position.y:F3},{position.z:F3}|{piece.Matrix.lossyScale.x:F3}");
+            }
+
+            parts.Sort(StringComparer.Ordinal);
+            using (MD5 md5 = MD5.Create())
+            {
+                return BitConverter.ToString(md5.ComputeHash(Encoding.UTF8.GetBytes(string.Join(";", parts)))).Replace("-", "");
+            }
+        }
+
+        private static string IdOf(Object asset)
+        {
+            return AssetDatabase.TryGetGUIDAndLocalFileIdentifier(asset, out string guid, out long localId) ? $"{guid}:{localId}" : asset.name;
+        }
+
+        // ---------------------------------------------------------------------------------------------------------------
+        // Geração de um prefab
+        // ---------------------------------------------------------------------------------------------------------------
+
+        private static string BuildOne(string sourcePath, List<Piece> pieces, HashSet<string> usedOutputs)
+        {
+            string relative = sourcePath.Substring(SourceRoot.Length + 1);
+            string folder = $"{OutputRoot}/{Path.GetDirectoryName(relative).Replace('\\', '/')}";
+            string baseName = SanitizeName(Path.GetFileNameWithoutExtension(sourcePath));
+
+            string output = $"{folder}/{baseName}.prefab";
+            for (int suffix = 2; !usedOutputs.Add(output); suffix++) output = $"{folder}/{baseName}_{suffix}.prefab";
+            string outputName = Path.GetFileNameWithoutExtension(output);
+
+            EnsureFolder(folder);
+            EnsureFolder($"{folder}/Meshes");
+
+            Geometry geometry = BuildGeometry(pieces);
+            int vertices = geometry.Vertices.Count;
+            int lod0Triangles = geometry.TriangleCount;
+
+            bool groundCover = relative.StartsWith("GroundCover", StringComparison.Ordinal);
+            Mesh lod0Mesh = ToMesh(geometry, outputName + "_LOD0");
+
+            Mesh lod1Mesh = null;
+            int lod1Triangles = 0;
+            if (!groundCover && lod0Triangles >= MinTrianglesForLod1)
+            {
+                lod1Mesh = BuildThinnedMesh(geometry, outputName + "_LOD1", out lod1Triangles);
+                if (lod1Mesh != null && lod1Triangles > lod0Triangles * MaxLod1Ratio)
+                {
+                    Object.DestroyImmediate(lod1Mesh);
+                    lod1Mesh = null;
+                }
+            }
+
+            lod0Mesh = SaveMesh(lod0Mesh, $"{folder}/Meshes/{outputName}_LOD0.asset");
+            if (lod1Mesh != null) lod1Mesh = SaveMesh(lod1Mesh, $"{folder}/Meshes/{outputName}_LOD1.asset");
+
+            GameObject source = AssetDatabase.LoadAssetAtPath<GameObject>(sourcePath);
+            GameObject prefabRoot = new GameObject(outputName);
+            try
+            {
+                prefabRoot.transform.localScale = source.transform.localScale;
+
+                Renderer lod0Renderer = AddMeshChild(prefabRoot.transform, "LOD0", lod0Mesh, geometry.Materials);
+                Renderer lod1Renderer = lod1Mesh != null ? AddMeshChild(prefabRoot.transform, "LOD1", lod1Mesh, geometry.Materials) : null;
+
+                LODGroup group = prefabRoot.AddComponent<LODGroup>();
+                group.fadeMode = LODFadeMode.None;
+                group.animateCrossFading = false;
+
+                // O tamanho do grupo só é conhecido depois de calcular os limites; as alturas (tela) saem dele e das distâncias.
+                group.SetLODs(BuildLods(lod0Renderer, lod1Renderer, 0.5f, 0.1f));
+                group.RecalculateBounds();
+
+                float cullDistance = groundCover ? GroundCoverCullDistance : TreeCullDistance;
+                float cullHeight = HeightAt(group.size, cullDistance);
+                float lod1Height = Mathf.Max(HeightAt(group.size, TreeLod1Distance), cullHeight + 0.01f);
+                group.SetLODs(BuildLods(lod0Renderer, lod1Renderer, lod1Height, cullHeight));
+                group.RecalculateBounds();
+
+                PrefabUtility.SaveAsPrefabAsset(prefabRoot, output);
+            }
+            finally
+            {
+                Object.DestroyImmediate(prefabRoot);
+            }
+
+            List<string> notes = new List<string>();
+            if (geometry.MirroredPieces > 0) notes.Add($"{geometry.MirroredPieces} peça(s) espelhada(s) corrigida(s)");
+            if (geometry.MissingTangents) notes.Add("tangentes recalculadas");
+            if (lod1Mesh == null) notes.Add(groundCover ? "sem LOD1 (vegetação rasteira)" : "sem LOD1");
+
+            return $"{sourcePath} -> {output} | {pieces.Count} peças -> 1 renderer, {geometry.Materials.Count} material(is) | " +
+                   $"{lod0Triangles} / {(lod1Mesh != null ? lod1Triangles.ToString() : "-")} tri | {vertices} vért | {string.Join("; ", notes)}";
+        }
+
+        /// <summary>Sem LOD1: um nível só (some abaixo de <paramref name="cullHeight"/>). Com LOD1: LOD0 até <paramref name="lod1Height"/>, LOD1 até <paramref name="cullHeight"/>.</summary>
+        private static LOD[] BuildLods(Renderer lod0, Renderer lod1, float lod1Height, float cullHeight)
+        {
+            if (lod1 == null) return new[] { new LOD(cullHeight, new[] { lod0 }) };
+            return new[] { new LOD(lod1Height, new[] { lod0 }), new LOD(cullHeight, new[] { lod1 }) };
+        }
+
+        /// <summary>Altura relativa na tela (0 a 1) de um objeto de <paramref name="size"/> metros visto a <paramref name="distance"/> metros.</summary>
+        private static float HeightAt(float size, float distance)
+        {
+            float perMeter = 1f / (2f * Mathf.Tan(ReferenceFov * 0.5f * Mathf.Deg2Rad));
+            return Mathf.Clamp(size * perMeter / distance, 0.005f, 0.95f);
+        }
+
+        private static string SanitizeName(string name)
+        {
+            // "A1_5Arms_v2_00)" e "A1_Curved_v2_00 " viram nomes limpos; o resto do nome fica igual.
+            StringBuilder builder = new StringBuilder();
+            foreach (char c in name.Trim())
+            {
+                if (c == ')' || c == '(') continue;
+                builder.Append(c == ' ' ? '_' : c);
+            }
+
+            return builder.ToString();
+        }
+
+        private static Renderer AddMeshChild(Transform parent, string childName, Mesh mesh, List<Material> materials)
+        {
+            GameObject child = new GameObject(childName);
+            child.transform.SetParent(parent, false);
+
+            child.AddComponent<MeshFilter>().sharedMesh = mesh;
+            MeshRenderer renderer = child.AddComponent<MeshRenderer>();
+            renderer.sharedMaterials = materials.ToArray();
+
+            // Projetam e recebem sombra no prefab; no jogo, quem decide é o nível de sombras do menu (ScatterInstance).
+            // Sem sondas de luz/reflexo: custo à toa no celular.
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+            renderer.receiveShadows = true;
+            renderer.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
+            renderer.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
+            renderer.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
+            return renderer;
+        }
+
+        // ---------------------------------------------------------------------------------------------------------------
+        // Junção das malhas (LOD0)
+        // ---------------------------------------------------------------------------------------------------------------
+
+        private static MeshData Read(Mesh mesh)
+        {
+            if (MeshCache.TryGetValue(mesh, out MeshData data)) return data;
+
+            int count = mesh.vertexCount;
+            data = new MeshData
+            {
+                Vertices = mesh.vertices,
+                Normals = mesh.normals,
+                Tangents = mesh.tangents,
+                Uvs = mesh.uv,
+                Triangles = new int[mesh.subMeshCount][]
+            };
+
+            if (data.Normals.Length != count) data.Normals = null;
+            if (data.Tangents.Length != count) data.Tangents = null;
+            if (data.Uvs.Length != count) data.Uvs = null;
+
+            MeshCache[mesh] = data;
+            return data;
+        }
+
+        private static Geometry BuildGeometry(List<Piece> pieces)
+        {
+            Geometry geometry = new Geometry();
+
+            foreach (Piece piece in pieces)
+            {
+                MeshData data = Read(piece.Mesh);
+                int[] triangles = data.Triangles[piece.SubMesh] ?? (data.Triangles[piece.SubMesh] = piece.Mesh.GetTriangles(piece.SubMesh));
+
+                int bucket = geometry.Materials.IndexOf(piece.Material);
+                if (bucket < 0)
+                {
+                    geometry.Materials.Add(piece.Material);
+                    geometry.Triangles.Add(new List<int>());
+                    bucket = geometry.Materials.Count - 1;
+                }
+
+                Matrix4x4 matrix = piece.Matrix;
+                Matrix4x4 normalMatrix = matrix.inverse.transpose;
+                bool mirrored = matrix.determinant < 0f;
+                if (mirrored) geometry.MirroredPieces++;
+
+                int baseIndex = geometry.Vertices.Count;
+                for (int v = 0; v < data.Vertices.Length; v++)
+                {
+                    geometry.Vertices.Add(matrix.MultiplyPoint3x4(data.Vertices[v]));
+                    geometry.Normals.Add(data.Normals != null ? normalMatrix.MultiplyVector(data.Normals[v]).normalized : Vector3.up);
+                    geometry.Uvs.Add(data.Uvs != null ? data.Uvs[v] : Vector2.zero);
+
+                    if (data.Tangents != null)
+                    {
+                        Vector4 tangent = data.Tangents[v];
+                        Vector3 direction = matrix.MultiplyVector(new Vector3(tangent.x, tangent.y, tangent.z)).normalized;
+                        geometry.Tangents.Add(new Vector4(direction.x, direction.y, direction.z, mirrored ? -tangent.w : tangent.w));
+                    }
+                    else
+                    {
+                        geometry.Tangents.Add(new Vector4(1f, 0f, 0f, 1f));
+                        geometry.MissingTangents = true;
+                    }
+                }
+
+                List<int> target = geometry.Triangles[bucket];
+                for (int t = 0; t < triangles.Length; t += 3)
+                {
+                    // Espelhar (escala negativa) inverte o sentido dos triângulos: sem corrigir, a face some.
+                    target.Add(baseIndex + triangles[t]);
+                    target.Add(baseIndex + triangles[t + (mirrored ? 2 : 1)]);
+                    target.Add(baseIndex + triangles[t + (mirrored ? 1 : 2)]);
+                }
+            }
+
+            return geometry;
+        }
+
+        private static Mesh ToMesh(Geometry geometry, string name)
+        {
+            Mesh mesh = new Mesh { name = name };
+            if (geometry.Vertices.Count > 65535) mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+
+            mesh.SetVertices(geometry.Vertices);
+            mesh.SetNormals(geometry.Normals);
+            mesh.SetUVs(0, geometry.Uvs);
+            mesh.SetTangents(geometry.Tangents);
+            mesh.subMeshCount = geometry.Triangles.Count;
+            for (int i = 0; i < geometry.Triangles.Count; i++) mesh.SetTriangles(geometry.Triangles[i], i);
+
+            if (geometry.MissingTangents) mesh.RecalculateTangents();
+            mesh.RecalculateBounds();
+            MeshUtility.Optimize(mesh);
+            return mesh;
+        }
+
+        // ---------------------------------------------------------------------------------------------------------------
+        // Simplificação (LOD1)
+        // ---------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Remove parte dos cartões de folha: agrupa os triângulos em componentes (triângulos que dividem vértices). Os
+        /// componentes grandes (tronco, galhos) ficam intactos; os pequenos (cartões) entram numa fração fixa, sorteada
+        /// de forma determinística, e os que ficam são ampliados em torno do próprio centro para a copa não ficar rala.
+        /// </summary>
+        private static Mesh BuildThinnedMesh(Geometry geometry, string name, out int triangleCount)
+        {
+            int vertexCount = geometry.Vertices.Count;
+            int[] parent = new int[vertexCount];
+            for (int i = 0; i < vertexCount; i++) parent[i] = i;
+
+            foreach (List<int> triangles in geometry.Triangles)
+            {
+                for (int t = 0; t < triangles.Count; t += 3)
+                {
+                    Union(parent, triangles[t], triangles[t + 1]);
+                    Union(parent, triangles[t + 1], triangles[t + 2]);
+                }
+            }
+
+            int[] componentTriangles = new int[vertexCount];
+            Vector3[] centerSum = new Vector3[vertexCount];
+            int[] componentVertices = new int[vertexCount];
+
+            foreach (List<int> triangles in geometry.Triangles)
+            {
+                for (int t = 0; t < triangles.Count; t += 3) componentTriangles[Find(parent, triangles[t])]++;
+            }
+
+            for (int v = 0; v < vertexCount; v++)
+            {
+                int root = Find(parent, v);
+                centerSum[root] += geometry.Vertices[v];
+                componentVertices[root]++;
+            }
+
+            float scale = Mathf.Min(1f / Mathf.Sqrt(FoliageKeepFraction), MaxCardScale);
+
+            Mesh mesh = new Mesh { name = name };
+            List<Vector3> vertices = new List<Vector3>();
+            List<Vector3> normals = new List<Vector3>();
+            List<Vector4> tangents = new List<Vector4>();
+            List<Vector2> uvs = new List<Vector2>();
+            List<List<int>> newTriangles = new List<List<int>>();
+            int[] remap = new int[vertexCount];
+            triangleCount = 0;
+
+            foreach (List<int> triangles in geometry.Triangles)
+            {
+                List<int> kept = new List<int>();
+                for (int i = 0; i < remap.Length; i++) remap[i] = -1;
+
+                for (int t = 0; t < triangles.Count; t += 3)
+                {
+                    int root = Find(parent, triangles[t]);
+                    bool foliage = componentTriangles[root] <= SmallComponentTriangles;
+                    if (foliage && Hash01(root) >= FoliageKeepFraction) continue;
+
+                    Vector3 center = centerSum[root] / Mathf.Max(1, componentVertices[root]);
+                    for (int corner = 0; corner < 3; corner++)
+                    {
+                        int original = triangles[t + corner];
+                        if (remap[original] < 0)
+                        {
+                            Vector3 position = geometry.Vertices[original];
+                            if (foliage) position = center + (position - center) * scale;
+
+                            remap[original] = vertices.Count;
+                            vertices.Add(position);
+                            normals.Add(geometry.Normals[original]);
+                            tangents.Add(geometry.Tangents[original]);
+                            uvs.Add(geometry.Uvs[original]);
+                        }
+
+                        kept.Add(remap[original]);
+                    }
+                }
+
+                newTriangles.Add(kept);
+                triangleCount += kept.Count / 3;
+            }
+
+            if (triangleCount == 0)
+            {
+                Object.DestroyImmediate(mesh);
+                return null;
+            }
+
+            if (vertices.Count > 65535) mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+            mesh.SetVertices(vertices);
+            mesh.SetNormals(normals);
+            mesh.SetTangents(tangents);
+            mesh.SetUVs(0, uvs);
+            mesh.subMeshCount = newTriangles.Count;
+            for (int i = 0; i < newTriangles.Count; i++) mesh.SetTriangles(newTriangles[i], i);
+
+            mesh.RecalculateBounds();
+            MeshUtility.Optimize(mesh);
+            return mesh;
+        }
+
+        private static int Find(int[] parent, int index)
+        {
+            while (parent[index] != index)
+            {
+                parent[index] = parent[parent[index]];
+                index = parent[index];
+            }
+
+            return index;
+        }
+
+        private static void Union(int[] parent, int a, int b)
+        {
+            int rootA = Find(parent, a);
+            int rootB = Find(parent, b);
+            if (rootA != rootB) parent[rootB] = rootA;
+        }
+
+        // Número estável em [0,1) a partir do índice do componente: a mesma árvore sempre perde os mesmos cartões.
+        private static float Hash01(int value)
+        {
+            uint h = (uint)value * 2654435761u;
+            h ^= h >> 15;
+            h *= 2246822519u;
+            h ^= h >> 13;
+            return (h & 0xFFFFu) / 65536f;
+        }
+
+        // ---------------------------------------------------------------------------------------------------------------
+        // Arquivos
+        // ---------------------------------------------------------------------------------------------------------------
+
+        private static Mesh SaveMesh(Mesh mesh, string path)
+        {
+            Mesh existing = AssetDatabase.LoadAssetAtPath<Mesh>(path);
+            if (existing != null)
+            {
+                // Mantém o GUID do asset: prefabs gerados antes continuam apontando para ele.
+                EditorUtility.CopySerialized(mesh, existing);
+                Object.DestroyImmediate(mesh);
+                mesh = existing;
+                EditorUtility.SetDirty(mesh);
+            }
+            else
+            {
+                AssetDatabase.CreateAsset(mesh, path);
+            }
+
+            // O jogo nunca lê vértices em runtime: sem Read/Write o Unity descarta a cópia da CPU (metade da memória da malha).
+            SerializedObject serialized = new SerializedObject(mesh);
+            SerializedProperty readable = serialized.FindProperty("m_IsReadable");
+            if (readable != null)
+            {
+                readable.boolValue = false;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+            }
+
+            return mesh;
+        }
+
+        private static void EnsureFolder(string path)
+        {
+            if (AssetDatabase.IsValidFolder(path)) return;
+
+            string parent = Path.GetDirectoryName(path).Replace('\\', '/');
+            EnsureFolder(parent);
+            AssetDatabase.CreateFolder(parent, Path.GetFileName(path));
+        }
+    }
+}

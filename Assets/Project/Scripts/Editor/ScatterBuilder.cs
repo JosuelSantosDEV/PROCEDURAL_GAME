@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using PROCEDURAL_GAME.Core;
 using PROCEDURAL_GAME.World;
 using UnityEditor;
 using UnityEngine;
@@ -31,10 +32,13 @@ namespace PROCEDURAL_GAME.EditorTools
         private const float LeafyTreesSinkDepth = 0f;
 
         private const string DryTreesFolder ="Assets/Dry_Trees/Prefab";
-        private const string MobileFvRoot = "Assets/Mobile_FV";
-        private const string MiscFolder = "Assets/Mobile_FV/Prefabs/Misc";
+
+        // Árvores e vegetação otimizadas (geradas por Trees > 3 - Build ALL a partir do Mobile_FV): 1 renderer + LODGroup.
+        private const string TreesRoot = "Assets/Project/Trees";
+        private const string MiscFolder = TreesRoot + "/Misc";
+        private const string LegacyRoot = "Assets/Mobile_FV/";
         private const string LeafyTreesAssetPath = "Assets/Project/Scatter/ArvoresMobile.asset";
-        private const string GroundCoverFolder = "Assets/Mobile_FV/Prefabs/GroundCover";
+        private const string GroundCoverFolder = TreesRoot + "/GroundCover";
         private const string RocksFolder = "Assets/Pizza&Games/Realistic Rocks/Prefabs";
 
         public static void EnsureDefaults(BiomeProfile meadow, BiomeProfile forest01, BiomeProfile forest02)
@@ -72,13 +76,13 @@ namespace PROCEDURAL_GAME.EditorTools
             });
 
             // Só monta os grupos se o perfil ainda não tem: valores que você ajustou (altura, colisor) nunca são sobrescritos.
-            if (!leafyTrees.HasGroups) RebuildTreeGroups(leafyTrees);
+            // Perfis ainda apontando para os prefabs originais do Mobile_FV passam para as versões otimizadas (com LOD).
+            if (!leafyTrees.HasGroups || UsesLegacyPrefabs(leafyTrees)) RebuildTreeGroups(leafyTrees);
 
             // Arbustos: samambaias e touceiras do pacote (verão). Sem colisão: o Player passa por dentro.
             ScatterProfile shrubs = GetOrCreate("Arbustos", profile =>
             {
-                profile.prefabs = FindPrefabs(
-                    name => name.StartsWith("Sm") && (name.Contains("fern") || name.Contains("WeedGroup")), GroundCoverFolder);
+                profile.prefabs = FindPrefabs(IsShrub, GroundCoverFolder);
                 profile.salt = 31;
                 profile.attemptsPerChunk = ShrubsAttempts;
                 profile.minSpacing = 1.5f;
@@ -90,6 +94,21 @@ namespace PROCEDURAL_GAME.EditorTools
                 profile.sinkDepth = 0.05f;
                 profile.collision = ScatterCollision.None;
             });
+
+            if (UsesLegacyPrefabs(shrubs))
+            {
+                GameObject[] optimized = FindPrefabs(IsShrub, GroundCoverFolder);
+                if (optimized.Length > 0)
+                {
+                    shrubs.prefabs = optimized;
+                    EditorUtility.SetDirty(shrubs);
+                    AssetDatabase.SaveAssets();
+                }
+                else
+                {
+                    Debug.LogWarning("Arbustos ainda usam prefabs do Mobile_FV: rode Trees > 3 - Build ALL e depois Create Procedural World.");
+                }
+            }
 
             // Cada perfil entra numa categoria do menu de Desempenho. Só preenche se vazio: um nome que você mudou fica.
             EnsureCategory(deadTrees, "trees", "Árvores");
@@ -110,6 +129,14 @@ namespace PROCEDURAL_GAME.EditorTools
             EnsureCategory(rocks, "rocks", "Rochas");
             EnsureCategory(sparseRocks, "rocks", "Rochas");
 
+            // Sombras: árvores projetam a partir da qualidade Baixa; pedras só da Média; arbustos nunca (são muitos e pequenos).
+            // Só preenche se ainda não definido (-1): o que você ajustou no Inspector fica.
+            EnsureShadowLevel(deadTrees, PerformanceSettings.ShadowLow);
+            EnsureShadowLevel(leafyTrees, PerformanceSettings.ShadowLow);
+            EnsureShadowLevel(shrubs, PerformanceSettings.ShadowOff);
+            EnsureShadowLevel(rocks, PerformanceSettings.ShadowMedium);
+            EnsureShadowLevel(sparseRocks, PerformanceSettings.ShadowMedium);
+
             // Afundamento: valores que este script já usou (0,1 e 0,03) viram o atual; ajustes seus ficam.
             MigrateSinkDepth(deadTrees, DeadTreesSinkDepth, 0.03f);
             MigrateSinkDepth(leafyTrees, LeafyTreesSinkDepth, 0.1f, 0.03f);
@@ -126,11 +153,6 @@ namespace PROCEDURAL_GAME.EditorTools
 
         private const string SpiralTreeId = "SpiralTree";
 
-        // true: usa a versão "Opt_" (1 malha + LOD) quando existe. Os prefabs de Prefabs/<estação> não têm LOD e vários são feitos
-        // de dezenas de malhas (Curved: 78), o que pesa no celular; só os tipos sem versão otimizada (Tree, young2, Jungle1)
-        // vêm de lá. Em false, todos vêm de Prefabs/ (6 variações por tipo e pacote, em vez de 3).
-        private const bool PreferOptimized = true;
-
         // Tipo (trecho do nome do prefab) e altura inicial em metros em relação ao terreno, medida no Editor. Colisor começa em 1.
         // 'young1' não está na lista: os prefabs eram idênticos aos de 'Tree' (mesma malha e materiais) e foram apagados.
         private static readonly (string id, float elevation)[] TreeTypes =
@@ -140,10 +162,10 @@ namespace PROCEDURAL_GAME.EditorTools
             ("young2", -0.1f), ("Jungle1", -10.0f), (SpiralTreeId, -1.0f)
         };
 
-        // Pacotes de estação usados; Winter, Uniques e New Branches ficam de fora de propósito.
+        // Pacotes de estação usados nesta floresta; Winter não entra por enquanto (existe em Trees/Winter, para depois).
         private static readonly string[] SeasonPacks = { "Autumn", "Spring", "Summer" };
 
-        // Ex.: "Sm1_young1_v2 1", "Opt_S1_5Arms_v3_00", "A2_Tree_short_v1_00". O tipo vem entre o prefixo do pacote e "_v<n>".
+        // Ex.: "Sm1_young2_v2", "A2_Tree_short_v1_00". O tipo vem entre o prefixo do pacote e "_v<n>".
         private static readonly Regex TreeNameRegex = new Regex(
             @"^(?:Opt_)?[A-Za-z]+\d_(?<type>" + BuildTypePattern() + @")_v\d",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -188,14 +210,9 @@ namespace PROCEDURAL_GAME.EditorTools
             }
 
             List<string> ignored = new List<string>();
-            Dictionary<string, Dictionary<string, List<GameObject>>> optimizedByPack = new Dictionary<string, Dictionary<string, List<GameObject>>>();
-            Dictionary<string, Dictionary<string, List<GameObject>>> regularByPack = new Dictionary<string, Dictionary<string, List<GameObject>>>();
+            Dictionary<string, Dictionary<string, List<GameObject>>> treesByPack = new Dictionary<string, Dictionary<string, List<GameObject>>>();
 
-            foreach (string pack in SeasonPacks)
-            {
-                optimizedByPack[pack] = ClassifyTreeFolder($"{MobileFvRoot}/Optimized/{pack}", ignored);
-                regularByPack[pack] = ClassifyTreeFolder($"{MobileFvRoot}/Prefabs/{pack}", ignored);
-            }
+            foreach (string pack in SeasonPacks) treesByPack[pack] = ClassifyTreeFolder($"{TreesRoot}/{pack}", ignored);
 
             List<ScatterProfile.PrefabGroup> result = new List<ScatterProfile.PrefabGroup>();
             List<string> report = new List<string>();
@@ -220,23 +237,10 @@ namespace PROCEDURAL_GAME.EditorTools
                 {
                     foreach (string pack in SeasonPacks)
                     {
-                        List<GameObject> source = null;
-                        string kind = "Prefabs";
-
-                        if (PreferOptimized && optimizedByPack[pack].TryGetValue(id, out List<GameObject> optimized) && optimized.Count > 0)
-                        {
-                            source = optimized;
-                            kind = "Opt";
-                        }
-                        else if (regularByPack[pack].TryGetValue(id, out List<GameObject> regular))
-                        {
-                            source = regular;
-                        }
-
-                        if (source == null) continue;
+                        if (!treesByPack[pack].TryGetValue(id, out List<GameObject> source)) continue;
 
                         foreach (GameObject prefab in source) variants.Add(new ScatterProfile.GroupVariant { prefab = prefab, pack = pack });
-                        origin.Add($"{pack} {source.Count} [{kind}]");
+                        origin.Add($"{pack} {source.Count}");
                     }
                 }
 
@@ -260,6 +264,12 @@ namespace PROCEDURAL_GAME.EditorTools
                 report.Add($"{id}: {variants.Count} variações ({string.Join(", ", origin)})");
             }
 
+            if (result.Count == 0)
+            {
+                Debug.LogError($"Nenhuma árvore encontrada em '{TreesRoot}'. Rode PROCEDURAL_GAME > Trees > 1 e 3 (Build ALL) antes; o perfil '{profile.name}' não foi alterado.");
+                return;
+            }
+
             profile.groups = result.ToArray();
             profile.prefabs = Array.Empty<GameObject>();
             EditorUtility.SetDirty(profile);
@@ -268,6 +278,35 @@ namespace PROCEDURAL_GAME.EditorTools
             string message = $"Grupos de árvores de '{profile.name}' refeitos ({result.Count} tipos):\n" + string.Join("\n", report);
             if (ignored.Count > 0) message += $"\nIgnorados (fora dos tipos usados): {string.Join(", ", ignored)}";
             Debug.Log(message);
+        }
+
+        private static bool IsShrub(string name) => name.StartsWith("Sm") && (name.Contains("fern") || name.Contains("WeedGroup"));
+
+        /// <summary>Verdadeiro se o perfil ainda usa algum prefab original do Mobile_FV (sem as otimizações de malha e LOD).</summary>
+        private static bool UsesLegacyPrefabs(ScatterProfile profile)
+        {
+            if (profile.prefabs != null)
+            {
+                foreach (GameObject prefab in profile.prefabs)
+                {
+                    if (prefab != null && AssetDatabase.GetAssetPath(prefab).StartsWith(LegacyRoot, StringComparison.Ordinal)) return true;
+                }
+            }
+
+            if (profile.groups != null)
+            {
+                foreach (ScatterProfile.PrefabGroup group in profile.groups)
+                {
+                    if (group?.variants == null) continue;
+
+                    foreach (ScatterProfile.GroupVariant variant in group.variants)
+                    {
+                        if (variant.prefab != null && AssetDatabase.GetAssetPath(variant.prefab).StartsWith(LegacyRoot, StringComparison.Ordinal)) return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         /// <summary>Agrupa os prefabs de uma pasta pelo tipo de árvore (id canônico de <see cref="TreeTypes"/>); o que não casa vai para <paramref name="ignored"/>.</summary>
@@ -401,6 +440,15 @@ namespace PROCEDURAL_GAME.EditorTools
 
             if (!changed) return;
 
+            EditorUtility.SetDirty(profile);
+            AssetDatabase.SaveAssets();
+        }
+
+        private static void EnsureShadowLevel(ScatterProfile profile, int level)
+        {
+            if (profile.castShadowsFromLevel >= 0) return;
+
+            profile.castShadowsFromLevel = level;
             EditorUtility.SetDirty(profile);
             AssetDatabase.SaveAssets();
         }

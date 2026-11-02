@@ -19,6 +19,7 @@ MonoBehaviour:
   - {fileID: 2245152065503751760, guid: 4d95095eafec7b74ebbd938669290339, type: 3}
   - {fileID: 178657432713521969, guid: d98691ffb222c8c4589647df8bad2163, type: 3}
   - {fileID: 5121512815615499271, guid: 9ddda69a3c0cb144cab3ae45534f3ac4, type: 3}
+  groups: []
   salt: 23
   categoryId: rocks
   category: Rochas
@@ -33,25 +34,6 @@ MonoBehaviour:
   maxScale: 1.6
   alignToSurface: 0.6
   sinkDepth: 0.15
+  castShadowsFromLevel: 2
   collision: 2
   trunkRadius: 0.35
-  trunkRadiusScale: 1
-  footprints:
-  - baseRadius: 1.4478168
-    trunkRadius: 1.4478168
-    trunkCenter: {x: 0.09002646, y: 0.22936259}
-  - baseRadius: 0.99138886
-    trunkRadius: 0.99138886
-    trunkCenter: {x: -0.12844251, y: -0.47388372}
-  - baseRadius: 2.0089083
-    trunkRadius: 2.0089083
-    trunkCenter: {x: -0.12334408, y: 0.1764938}
-  - baseRadius: 1.2571368
-    trunkRadius: 1.2571368
-    trunkCenter: {x: -0.13114296, y: -0.15842378}
-  - baseRadius: 1.7486582
-    trunkRadius: 1.7486582
-    trunkCenter: {x: -0.6251252, y: 0.5142283}
-  - baseRadius: 1.8825419
-    trunkRadius: 1.8825419
-    trunkCenter: {x: 0.14986104, y: 0.2251205}

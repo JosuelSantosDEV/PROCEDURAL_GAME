@@ -1864,7 +1864,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   sun: {fileID: 410087040}
   targetCamera: {fileID: 330585545}
-  dynamicShadows: 0
 --- !u!114 &1959282503
 MonoBehaviour:
   m_ObjectHideFlags: 0

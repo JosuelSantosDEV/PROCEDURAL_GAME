@@ -115,6 +115,9 @@ namespace PROCEDURAL_GAME.World
         }
 
         /// <summary>Altura do terreno em qualquer ponto do mundo, mesmo onde o chunk ainda não foi criado.</summary>
+        /// <summary>Muda quais objetos espalhados projetam sombra (chamado pelo <see cref="ShadowController"/>).</summary>
+        public void ApplyShadowLevel(int level) => scatter?.SetShadowLevel(level);
+
         public float GetHeight(float x, float z) => terrainNoise.GetHeight(x, z);
 
         private void Awake()
@@ -159,6 +162,9 @@ namespace PROCEDURAL_GAME.World
             {
                 scatter = new ScatterSpawner(transform, new ChunkScatter(terrainNoise, seed, chunkSize, spawnClearRadius), biome.scatter);
             }
+
+            // Aplica o nível de sombras do menu (luz, URP e objetos). Nasce junto: não exige refazer a cena.
+            if (GetComponent<ShadowController>() == null) gameObject.AddComponent<ShadowController>();
         }
 
         private void Start()

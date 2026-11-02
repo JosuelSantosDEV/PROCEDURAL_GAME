@@ -69,6 +69,22 @@ namespace PROCEDURAL_GAME.World
         [Tooltip("Raio de carregamento desse bioma, em chunks. 0 = usa o 'View Radius' do World. Biomas fechados (floresta) podem usar menos, com neblina mais densa, e carregam bem menos objetos. Lido uma vez, ao dar Play. Mantenha a neblina ≈ Raio × Chunk Size.")]
         [Range(0, 12)] public int viewRadius = 0;
 
+        [Header("Sombras")]
+        [Tooltip("Distância máxima das sombras, em metros, em cada nível do menu: Baixa, Média e Alta. Menor = sombra mais nítida e mais barata (o mapa de sombras tem resolução fixa). Em biomas de neblina densa não adianta passar de onde a neblina esconde tudo.")]
+        public Vector3 shadowDistances = new Vector3(20f, 30f, 45f);
+
+        /// <summary>Distância de sombra do nível de menu 1 (Baixa) a 3 (Alta); 0 se desligadas.</summary>
+        public float GetShadowDistance(int level)
+        {
+            switch (level)
+            {
+                case 1: return Mathf.Max(1f, shadowDistances.x);
+                case 2: return Mathf.Max(1f, shadowDistances.y);
+                case 3: return Mathf.Max(1f, shadowDistances.z);
+                default: return 0f;
+            }
+        }
+
         [Header("Objetos")]
         [Tooltip("O que nasce nesse bioma (árvores, pedras...). Cada item é um Scatter Profile. Lido uma vez, ao dar Play.")]
         public ScatterProfile[] scatter;

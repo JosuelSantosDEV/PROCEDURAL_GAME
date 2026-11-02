@@ -112,6 +112,10 @@ namespace PROCEDURAL_GAME.World
         [Tooltip("Afundamento fixo no chão, em metros por unidade de escala (soma com a altura do grupo, se houver).")]
         [Min(0f)] public float sinkDepth = 0.1f;
 
+        [Header("Sombras")]
+        [Tooltip("A partir de qual nível de sombras do jogo este objeto projeta sombra: 0 = nunca; 1 = Baixa, Média e Alta; 2 = Média e Alta; 3 = só Alta. -1 = não definido (vale 0; o menu Create Procedural World preenche).")]
+        [Range(-1, 3)] public int castShadowsFromLevel = -1;
+
         [Header("Colisão")]
         public ScatterCollision collision = ScatterCollision.None;
 
@@ -124,6 +128,9 @@ namespace PROCEDURAL_GAME.World
         // Por grupo: primeira variação em 'Variants' e quantas são (as variações de um grupo ficam seguidas).
         [NonSerialized] private int[] groupFirst;
         [NonSerialized] private int[] groupLength;
+
+        /// <summary>Nível mínimo de sombras para este objeto projetar sombra (0 = nunca).</summary>
+        public int ShadowFromLevel => Mathf.Max(0, castShadowsFromLevel);
 
         public bool HasGroups => groups != null && groups.Length > 0;
 

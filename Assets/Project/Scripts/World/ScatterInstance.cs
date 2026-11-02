@@ -1,10 +1,11 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace PROCEDURAL_GAME.World
 {
     /// <summary>
     /// Um objeto reciclável (árvore, pedra...) criado a partir de um prefab. Na criação o prefab é "limpo":
-    /// colisores originais saem (malhas de colisão pesam), sombras são desligadas (como no terreno) e,
+    /// colisores originais saem (malhas de colisão pesam), as sombras seguem o nível escolhido no menu e,
     /// se o perfil pedir, entra um colisor simples no lugar.
     /// </summary>
     public sealed class ScatterInstance
@@ -14,6 +15,10 @@ namespace PROCEDURAL_GAME.World
         private readonly Vector3 baseScale;
         private readonly LODGroup lodGroup;
         private readonly Collider collider;
+        private readonly Renderer[] renderers;
+
+        // Só os renderers do LOD0 (o mais detalhado) projetam sombra; as versões simplificadas, usadas de mais longe, nunca.
+        private readonly bool[] canCastShadow;
 
         // Só no colisor de tronco: raio base (espaço local) e a cápsula, para aplicar o multiplicador do grupo em Place.
         private CapsuleCollider trunkCapsule;
@@ -25,7 +30,7 @@ namespace PROCEDURAL_GAME.World
         /// <param name="staging">Objeto DESATIVADO onde o prefab nasce. Sob um pai inativo o Unity não ativa os componentes,
         /// então os colisores originais (convexos, caros de calcular) nunca chegam a ser criados antes de os removermos.</param>
         /// <param name="parent">Onde a instância fica depois de pronta.</param>
-        public ScatterInstance(ScatterProfile profile, GameObject prefab, Transform staging, Transform parent)
+        public ScatterInstance(ScatterProfile profile, GameObject prefab, Transform staging, Transform parent, int shadowLevel)
         {
             Profile = profile;
             Prefab = prefab;
@@ -44,11 +49,9 @@ namespace PROCEDURAL_GAME.World
             // mexemos numa cópia inativa nossa, nunca no asset do prefab.
             foreach (Collider original in gameObject.GetComponentsInChildren<Collider>(true)) Object.DestroyImmediate(original);
 
-            foreach (Renderer renderer in gameObject.GetComponentsInChildren<Renderer>(true))
-            {
-                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                renderer.receiveShadows = false;
-            }
+            renderers = gameObject.GetComponentsInChildren<Renderer>(true);
+            canCastShadow = FindShadowCasters(renderers, lodGroup);
+            SetShadowLevel(shadowLevel);
 
             collider = AddCollider(profile);
             if (collider != null) collider.enabled = false;
@@ -75,6 +78,40 @@ namespace PROCEDURAL_GAME.World
 
             if (collider != null) collider.enabled = false;
             gameObject.SetActive(true);
+        }
+
+        /// <summary>
+        /// Projeta sombra só a partir do nível definido no perfil (0 = nunca); recebe sempre que há sombras. Com sombras
+        /// desligadas nada projeta nem recebe, como antes.
+        /// </summary>
+        public void SetShadowLevel(int level)
+        {
+            int castFrom = Profile.ShadowFromLevel;
+            bool cast = castFrom > 0 && level >= castFrom;
+            UnityEngine.Rendering.ShadowCastingMode mode = cast ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off;
+
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                renderers[i].shadowCastingMode = canCastShadow[i] ? mode : UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderers[i].receiveShadows = level > 0;
+            }
+        }
+
+        /// <summary>Com mais de um LOD, só o primeiro projeta sombra; sem LODGroup, todos os renderers podem.</summary>
+        private static bool[] FindShadowCasters(Renderer[] all, LODGroup group)
+        {
+            bool[] result = new bool[all.Length];
+            LOD[] lods = group != null ? group.GetLODs() : null;
+
+            if (lods == null || lods.Length < 2)
+            {
+                for (int i = 0; i < result.Length; i++) result[i] = true;
+                return result;
+            }
+
+            HashSet<Renderer> nearest = new HashSet<Renderer>(lods[0].renderers);
+            for (int i = 0; i < all.Length; i++) result[i] = nearest.Contains(all[i]);
+            return result;
         }
 
         public void Deactivate() => gameObject.SetActive(false);
