@@ -49,7 +49,21 @@ namespace PROCEDURAL_GAME.World
             [Tooltip("Peso do tipo no sorteio: todos os tipos valem o mesmo por padrão (1), qualquer que seja o número de variações. 0,5 = metade da frequência dos demais; 2 = o dobro.")]
             [Min(0.01f)] public float weight = 1f;
 
+            [Tooltip("Preferência do tipo (1 a 3) na mistura por preferência do perfil: a fatia de cada preferência é dividida entre os tipos dela. Só vale com 'Mix By Preference' ligado.")]
+            [Range(1, 3)] public int preference = 2;
+
             public GroupVariant[] variants;
+        }
+
+        /// <summary>Uma zona do mundo (ex.: uma estação do ano) e os pacotes cujas variações podem nascer nela.</summary>
+        [Serializable]
+        public class SeasonZone
+        {
+            [Tooltip("Nome da zona (ex.: Autumn).")]
+            public string id;
+
+            [Tooltip("Pacotes (o campo 'Pack' das variações) que nascem nesta zona. Pacotes parecidos podem dividir uma zona (ex.: Summer e Misc).")]
+            public string[] packs;
         }
 
         /// <summary>Variação já resolvida (lista única, na ordem dos grupos) usada na geração.</summary>
@@ -61,6 +75,9 @@ namespace PROCEDURAL_GAME.World
             public int group;
 
             public string pack;
+
+            /// <summary>Zonas em que a variação nasce: um bit por zona de <see cref="ActiveZones"/> (bit 0 = primeira). -1 = todas (pacote sem zona).</summary>
+            public int zoneMask;
         }
 
         [Header("O que espalhar")]
@@ -81,10 +98,45 @@ namespace PROCEDURAL_GAME.World
 
         [Header("Quantidade e posição")]
         [Tooltip("Tentativas por chunk (32 x 32 m). É o máximo de objetos: tentativas em lugar proibido (muito inclinado, alto demais, perto de outro) são descartadas.")]
-        [Min(0)] public int attemptsPerChunk = 12;
+        [Min(0f)] public float attemptsPerChunk = 12f;
 
-        [Tooltip("Distância mínima entre dois objetos do mesmo perfil, em metros. Não vale entre chunks vizinhos.")]
+        [Tooltip("Distância mínima entre dois objetos do mesmo perfil, em metros. Não vale entre chunks vizinhos. Ignorada com 'Spacing By Density' ligado.")]
         [Min(0f)] public float minSpacing = 4f;
+
+        [Tooltip("Distribui os objetos numa GRADE quadrada (cada um com 4 vizinhos à mesma distância, como uma matriz) em vez de sorteá-los soltos. O lado da grade é a raiz da área por objeto: mais densidade = objetos mais perto; menos densidade = mais longe. Ignora 'Min Spacing'.")]
+        public bool spacingByDensity = false;
+
+        [Tooltip("Desvio aleatório de cada objeto dentro da sua célula da grade, como fração do lado (0 = matriz perfeita; 0,15 = leve desvio natural; máx. 0,45). A distância mínima entre dois objetos é lado x (1 - 2 x desvio).")]
+        [Range(0f, 0.45f)] public float spacingJitter = 0.15f;
+
+        [Header("Zonas (só com grupos)")]
+        [Tooltip("Perfil cujas zonas (lista, tamanho e sorteio) este perfil usa, para dividir o mundo exatamente igual a ele (ex.: arbustos seguindo as zonas das árvores). Vazio = usa as próprias.")]
+        public ScatterProfile zoneSource;
+
+        [Tooltip("Divide o mundo em zonas; cada zona usa só os pacotes de UMA entrada desta lista (ex.: uma estação), sem misturar. Vazio = sem zonas, todos os pacotes juntos.")]
+        public SeasonZone[] zones;
+
+        [Tooltip("Tamanho típico de uma zona, em metros: a área é de aproximadamente este valor ao quadrado (160 m = ~25.000 m²). As zonas têm formato irregular e a troca entre elas é seca, sem árvores de zonas diferentes intercaladas.")]
+        [Min(20f)] public float zoneSize = 160f;
+
+        [Header("Mistura de tipos (só com grupos)")]
+        [Tooltip("Liga o sorteio por preferência: cada tipo tem uma preferência (1 a 3) e as fatias abaixo dizem quanto de cada preferência aparece, variando entre floresta baixa e alta conforme o lugar. Desligado = todos os tipos valem o seu 'Weight'.")]
+        public bool mixByPreference = false;
+
+        [Tooltip("Fatia de cada preferência (1, 2, 3) na floresta BAIXA. Os valores são relativos (não precisam somar 1).")]
+        public Vector3 lowForestShares = new Vector3(0.5f, 0.3f, 0.2f);
+
+        [Tooltip("Fatia de cada preferência (1, 2, 3) na floresta ALTA.")]
+        public Vector3 highForestShares = new Vector3(0.35f, 0.35f, 0.3f);
+
+        [Tooltip("Tamanho das manchas de floresta baixa/alta, em metros. Maior = trechos mais longos de cada tipo.")]
+        [Min(20f)] public float forestMixSize = 180f;
+
+        [Tooltip("Nitidez da transição entre floresta baixa e alta. Maior = trechos mais definidos; menor = mistura gradual.")]
+        [Range(1f, 8f)] public float forestMixContrast = 3f;
+
+        [Tooltip("Inclina o mundo para um lado: -1 = só floresta baixa; 0 = metade/metade; +1 = só floresta alta.")]
+        [Range(-1f, 1f)] public float forestMixBias = 0f;
 
         [Tooltip("Agrupamento: 0 = espalhado por igual; 1 = só em manchas (bosques, pedreiras) com clareiras entre elas.")]
         [Range(0f, 1f)] public float clustering = 0.5f;
@@ -134,6 +186,24 @@ namespace PROCEDURAL_GAME.World
 
         public bool HasGroups => groups != null && groups.Length > 0;
 
+        // Quem define as zonas: o perfil indicado em 'zoneSource' ou este mesmo. Um nível só (a origem não é seguida de novo).
+        private ScatterProfile ZoneProfile => zoneSource != null ? zoneSource : this;
+
+        /// <summary>Zonas em vigor para este perfil (as próprias ou as do 'zoneSource').</summary>
+        public SeasonZone[] ActiveZones => ZoneProfile.zones;
+
+        /// <summary>Tamanho típico das zonas, em metros.</summary>
+        public float ZoneSize => ZoneProfile.zoneSize;
+
+        /// <summary>Número que embaralha o sorteio das zonas. Perfis com a mesma origem têm o mesmo mapa de zonas.</summary>
+        public int ZoneSalt => ZoneProfile.salt;
+
+        /// <summary>Quantas zonas o mundo tem para este perfil (1 = sem zonas).</summary>
+        public int ZoneCount => UsesZones ? ActiveZones.Length : 1;
+
+        /// <summary>Verdadeiro se o perfil divide o mundo em zonas (precisa de grupos e de ao menos uma zona).</summary>
+        public bool UsesZones => HasGroups && ActiveZones != null && ActiveZones.Length > 0;
+
         /// <summary>Todas as variações possíveis, na ordem estável usada pelo sorteio (o índice é parte do determinismo).</summary>
         public Variant[] Variants => variants ?? (variants = BuildVariants());
 
@@ -153,6 +223,9 @@ namespace PROCEDURAL_GAME.World
 
         /// <summary>Peso do grupo no sorteio de tipos.</summary>
         public float GetGroupWeight(int group) => IsValidGroup(group) ? Mathf.Max(0.01f, groups[group].weight) : 1f;
+
+        /// <summary>Preferência (1 a 3) do grupo na mistura por preferência.</summary>
+        public int GetPreference(int group) => IsValidGroup(group) ? Mathf.Clamp(groups[group].preference, 1, 3) : 2;
 
         /// <summary>Altura (m) do grupo em relação ao terreno; 0 para prefab solto.</summary>
         public float GetElevation(int group) => IsValidGroup(group) ? groups[group].elevation : 0f;
@@ -194,7 +267,30 @@ namespace PROCEDURAL_GAME.World
                 }
             }
 
-            return list.ToArray();
+            Variant[] result = list.ToArray();
+            for (int i = 0; i < result.Length; i++) result[i].zoneMask = ZoneMaskOfPack(result[i].pack);
+            return result;
+        }
+
+        // Um pacote pode nascer em várias zonas (ex.: os arbustos "Green" na primavera e no verão).
+        private int ZoneMaskOfPack(string pack)
+        {
+            SeasonZone[] active = ActiveZones;
+            if (active == null || string.IsNullOrEmpty(pack)) return -1;
+
+            int mask = 0;
+            for (int z = 0; z < active.Length && z < 31; z++)
+            {
+                string[] packs = active[z]?.packs;
+                if (packs == null) continue;
+
+                foreach (string candidate in packs)
+                {
+                    if (string.Equals(candidate, pack, StringComparison.OrdinalIgnoreCase)) mask |= 1 << z;
+                }
+            }
+
+            return mask != 0 ? mask : -1;
         }
 
 #if UNITY_EDITOR

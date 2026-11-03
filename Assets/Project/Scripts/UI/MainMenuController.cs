@@ -247,6 +247,7 @@ namespace PROCEDURAL_GAME.UI
             else CreateTargetFpsRow();
 
             CreateFpsCounterRow();
+            CreateViewDistanceRow();
             CreateShadowRow();
             CreateSectionTitle(PerformanceSettings.GetAutoQuality() ? "Objetos (máximo)" : "Objetos");
 
@@ -304,6 +305,46 @@ namespace PROCEDURAL_GAME.UI
         {
             CreateToggleRow("Contador de FPS", PerformanceSettings.GetShowFpsCounter(PerformanceSettings.DefaultShowFpsCounter),
                 PerformanceSettings.SetShowFpsCounter);
+        }
+
+        // Distância de visão: Perto, Médio, Longe. Define quanto do mundo existe, onde a neblina cobre tudo e até onde a câmera
+        // desenha. Com a qualidade automática, é o teto (ela pode reduzir em jogo).
+        private void CreateViewDistanceRow()
+        {
+            int level = PerformanceSettings.GetViewLevel();
+            string label = PerformanceSettings.GetAutoQuality() ? "Raio (máx.)" : "Raio de visão";
+
+            Text hint = null;
+            CreateSliderRow(label, PerformanceSettings.ViewFar, level, FormatViewDistance, newLevel =>
+            {
+                PerformanceSettings.SetViewLevel(newLevel);
+                if (hint != null) hint.text = ViewDistanceHint(newLevel);
+            });
+
+            hint = UiKit.CreateText(performanceContent, "ViewDistanceHint", ViewDistanceHint(level), 26, TextAnchor.UpperLeft, UiKit.MutedTextColor);
+            UiKit.SetLayout(hint.gameObject, preferredHeight: 80f);
+        }
+
+        private static string FormatViewDistance(int level)
+        {
+            switch (level)
+            {
+                case PerformanceSettings.ViewNear: return "Perto";
+                case PerformanceSettings.ViewFar: return "Longe";
+                default: return "Médio";
+            }
+        }
+
+        private static string ViewDistanceHint(int level)
+        {
+            string meters = $"{PerformanceSettings.GetViewDistance(level):0} m";
+
+            switch (level)
+            {
+                case PerformanceSettings.ViewNear: return $"Perto ({meters}): neblina mais fechada e bem menos objetos na tela. A opção mais leve.";
+                case PerformanceSettings.ViewFar: return $"Longe ({meters}): enxerga mais longe, com neblina mais leve. Pesa mais no celular.";
+                default: return $"Médio ({meters}): equilíbrio entre alcance e desempenho. É o padrão.";
+            }
         }
 
         // Sombras: 0 a 3. Com a qualidade automática, é o teto (ela reduz as sombras primeiro).

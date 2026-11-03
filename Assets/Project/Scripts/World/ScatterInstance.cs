@@ -10,6 +10,12 @@ namespace PROCEDURAL_GAME.World
     /// </summary>
     public sealed class ScatterInstance
     {
+        /// <summary>
+        /// Nome do objeto vazio que o gerador de árvores (Trees > 3 - Build ALL) deixa no prefab marcando o centro da base do
+        /// tronco. Serve só para posicionar o colisor; a instância o remove ao nascer. Prefabs sem ele usam o pivô.
+        /// </summary>
+        public const string TrunkCenterName = "TrunkCenter";
+
         private readonly GameObject gameObject;
         private readonly Transform transform;
         private readonly Vector3 baseScale;
@@ -23,6 +29,9 @@ namespace PROCEDURAL_GAME.World
         // Só no colisor de tronco: raio base (espaço local) e a cápsula, para aplicar o multiplicador do grupo em Place.
         private CapsuleCollider trunkCapsule;
         private float trunkRadiusLocal;
+
+        // Centro do tronco no espaço local da raiz (só x e z importam). Zero = o pivô do prefab já é o tronco.
+        private Vector3 trunkCenter;
 
         public ScatterProfile Profile { get; }
         public GameObject Prefab { get; }
@@ -43,6 +52,14 @@ namespace PROCEDURAL_GAME.World
 
             // true: o objeto está inativo e, por padrão, o Unity não procuraria nele.
             lodGroup = gameObject.GetComponentInChildren<LODGroup>(true);
+
+            // Marcador do centro do tronco: lê a posição e tira o objeto (não serve para mais nada em jogo).
+            Transform trunkMarker = transform.Find(TrunkCenterName);
+            if (trunkMarker != null)
+            {
+                trunkCenter = trunkMarker.localPosition;
+                Object.DestroyImmediate(trunkMarker.gameObject);
+            }
 
             // DestroyImmediate de propósito: Destroy só age no fim do frame, e a instância é ativada no mesmo frame
             // em que nasce, então o colisor convexo original seria calculado antes de sumir. É seguro aqui porque
@@ -148,8 +165,9 @@ namespace PROCEDURAL_GAME.World
             capsule.radius = trunkRadiusLocal;
             capsule.height = Mathf.Max(bounds.size.y, trunkRadiusLocal * 2f);
 
-            // O pivô da árvore é a base do tronco: centro em x/z = 0 (o centro da malha seguiria a copa, que pode pender).
-            capsule.center = new Vector3(0f, bounds.center.y, 0f);
+            // Centro em x/z = centro da base do tronco (marcador do prefab; sem ele, o pivô). Não usa o centro da malha,
+            // que seguiria a copa. Com o colisor no meio do tronco, aumentar o raio alarga igual para todos os lados.
+            capsule.center = new Vector3(trunkCenter.x, bounds.center.y, trunkCenter.z);
             trunkCapsule = capsule;
             return capsule;
         }

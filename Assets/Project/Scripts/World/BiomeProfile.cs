@@ -54,7 +54,7 @@ namespace PROCEDURAL_GAME.World
         [Tooltip("Cor da neblina. O céu usa a mesma cor, então o horizonte some sem emenda.")]
         public Color fogColor = new Color(0.55f, 0.57f, 0.60f);
 
-        [Tooltip("Densidade da neblina. Maior = enxerga menos. Distância em que a neblina esconde 95% ≈ 1,7 / densidade (0,014 → ~125 m).")]
+        [Tooltip("NÃO USADO em jogo: a densidade da neblina agora vem da distância de visão escolhida no menu Desempenho (Perto/Médio/Longe), de modo que a neblina cubra tudo nessa distância (World/ViewDistance). Fica só para o editor.")]
         [Min(0f)] public float fogDensity = 0.014f;
 
         [Tooltip("Luz que vem de todo lugar (sombras não ficam pretas). Mais escuro = mais sombrio.")]
@@ -66,12 +66,12 @@ namespace PROCEDURAL_GAME.World
         [Min(0f)] public float lightIntensity = 0.8f;
 
         [Header("Distância de visão")]
-        [Tooltip("Raio de carregamento desse bioma, em chunks. 0 = usa o 'View Radius' do World. Biomas fechados (floresta) podem usar menos, com neblina mais densa, e carregam bem menos objetos. Lido uma vez, ao dar Play. Mantenha a neblina ≈ Raio × Chunk Size.")]
+        [Tooltip("NÃO USADO em jogo: a distância de visão vem do menu Desempenho (Perto/Médio/Longe). Fica só por compatibilidade.")]
         [Range(0, 12)] public int viewRadius = 0;
 
         [Header("Sombras")]
-        [Tooltip("Distância máxima das sombras, em metros, em cada nível do menu: Baixa, Média e Alta. Menor = sombra mais nítida e mais barata (o mapa de sombras tem resolução fixa). Em biomas de neblina densa não adianta passar de onde a neblina esconde tudo.")]
-        public Vector3 shadowDistances = new Vector3(20f, 30f, 45f);
+        [Tooltip("Distância máxima das sombras, em metros, em cada nível do menu: Baixa, Média e Alta. Menor = sombra mais nítida e mais barata (o mapa de sombras tem resolução fixa, 512 px no URP-Balanced). Em biomas de neblina densa não adianta passar de onde a neblina esconde tudo.")]
+        public Vector3 shadowDistances = new Vector3(20f, 30f, 40f);
 
         /// <summary>Distância de sombra do nível de menu 1 (Baixa) a 3 (Alta); 0 se desligadas.</summary>
         public float GetShadowDistance(int level)

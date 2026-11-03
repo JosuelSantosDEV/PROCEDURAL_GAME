@@ -12,25 +12,152 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5f2710e03e9c872408b42f6176877f10, type: 3}
   m_Name: Arbustos
   m_EditorClassIdentifier: 
-  prefabs:
-  - {fileID: 1000994542435578643, guid: 79985a1c36ad509408c3febd694df7c5, type: 3}
-  - {fileID: 702173693910226493, guid: 04d3e4b6657acfb48bb0b86f7302a2a2, type: 3}
-  - {fileID: 4966468410712685786, guid: e177375be06b4644a977b5c8dedcdec5, type: 3}
-  - {fileID: 93920583777805423, guid: 8dabc2d0ae0243e49904a6b499e8241a, type: 3}
-  - {fileID: 4752043852272885954, guid: 22dcb6922140ce548ab67ff76a47626a, type: 3}
-  - {fileID: 1201072792093048289, guid: c180bf77a9c14124e99063e95ecf9424, type: 3}
-  - {fileID: 514336134134667524, guid: 14dc39ac6d730a649a3d19c06a8c038d, type: 3}
-  - {fileID: 2545398170917647655, guid: 76318f779195a3349b853dfe427df74f, type: 3}
-  - {fileID: 5332436151714361041, guid: 9f2b2ebad4412274e848b719bd3bffd8, type: 3}
-  - {fileID: 6772376980048470258, guid: 4848d65a9876b9d4aa14691de33cc73c, type: 3}
-  - {fileID: 4990579847432305695, guid: a18b8cca1a4df4b4481026fa6b49ee88, type: 3}
-  - {fileID: 2582781859761832898, guid: 00a34e9cc84c3ce41b8b362499ead9cf, type: 3}
-  groups: []
+  prefabs: []
+  groups:
+  - id: Green
+    displayName: Verde
+    elevation: 0
+    colliderScale: 1
+    weight: 1
+    preference: 2
+    variants:
+    - prefab: {fileID: 1683975341571080027, guid: c95dbb07c196b21438f11dd62f221b69,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 1121754700958667705, guid: eedebc755b686104eab219fbe251848a,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 4060412706270337112, guid: 7f6920a764ddecd46a17d1a8101a3c29,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 7645723448358911587, guid: 81b2e6ad1303a8b4491502e9c342b45d,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 2996802780373054252, guid: b3b76642926a69f45b12d2768cc48cfc,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 2582569649478955026, guid: 133b4a96f0cc1964db0bdcebed15fd33,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 962940019030022595, guid: 56b73b72850483f479fceb878c76a446,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 6142042552007975206, guid: 39eda513d9e7cd24aaaefa482127f8ee,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 8933167322316936038, guid: c67c4ddabdc26214dbc843e8da76466e,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 2559079493084016762, guid: e19f1cc395ad4234d893e84623e9624c,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 7883512333901318847, guid: f9899ae9e9305014ba7853c600bf7cbc,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 6766852563488161228, guid: b5c43caff7744004591761c5f9284ae3,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 1387326102581046448, guid: 8e6835c312f17eb45aa15d921ebb9129,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 4966468410712685786, guid: e177375be06b4644a977b5c8dedcdec5,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 93920583777805423, guid: 8dabc2d0ae0243e49904a6b499e8241a,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 4752043852272885954, guid: 22dcb6922140ce548ab67ff76a47626a,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 1201072792093048289, guid: c180bf77a9c14124e99063e95ecf9424,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 6501580245018594007, guid: 8b99582577b31894d9a1051705af95e5,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 2211295648584149726, guid: 0cb5185a879948941b60d00ec8c4ba7e,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 5332436151714361041, guid: 9f2b2ebad4412274e848b719bd3bffd8,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 6772376980048470258, guid: 4848d65a9876b9d4aa14691de33cc73c,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 4990579847432305695, guid: a18b8cca1a4df4b4481026fa6b49ee88,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 2582781859761832898, guid: 00a34e9cc84c3ce41b8b362499ead9cf,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 6143497629548446123, guid: 856e3fd2a8284b642b166caed273d3a9,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 8767894318515250035, guid: 345f0003389c4874c9dfafded76f1564,
+        type: 3}
+      pack: Green
+    - prefab: {fileID: 5875726945757158492, guid: 538336635d446334bbe4e12553c70c96,
+        type: 3}
+      pack: Green
+  - id: Dry
+    displayName: Seco
+    elevation: 0
+    colliderScale: 1
+    weight: 1
+    preference: 2
+    variants:
+    - prefab: {fileID: 879006194952016822, guid: 806749e44966d5e49a7b151ddacb7f2f,
+        type: 3}
+      pack: Dry
+    - prefab: {fileID: 8151991403584460805, guid: 5534d4dda4073e9469f6d9641e321811,
+        type: 3}
+      pack: Dry
+    - prefab: {fileID: 3256159848609110273, guid: 3c854ff8bb3d2a449954a0805a225ec7,
+        type: 3}
+      pack: Dry
+    - prefab: {fileID: 8306155506809502962, guid: fff8e9f6aa93b43489198e89b192b75c,
+        type: 3}
+      pack: Dry
+    - prefab: {fileID: 8157145559648200261, guid: c8d0484ca336daa45bab321d4244f41f,
+        type: 3}
+      pack: Dry
+    - prefab: {fileID: 2043939815441222255, guid: a4e9f6315ac49234d960b6836569ab3c,
+        type: 3}
+      pack: Dry
+    - prefab: {fileID: 7075742219035157202, guid: b96c5a49d38c49f4394544921a93c38b,
+        type: 3}
+      pack: Dry
+    - prefab: {fileID: 3851406038955049512, guid: 685ed7d58215f994889779c22491a631,
+        type: 3}
+      pack: Dry
+    - prefab: {fileID: 669356991921443937, guid: 2ef01c037c566824b84552266c17918b,
+        type: 3}
+      pack: Dry
+    - prefab: {fileID: 3716145475598135025, guid: 5745346891f2ed14186706df2f7e7b1f,
+        type: 3}
+      pack: Dry
+    - prefab: {fileID: 1463743199319921303, guid: 8aa03299426276d42996ef4488d2e6c7,
+        type: 3}
+      pack: Dry
+    - prefab: {fileID: 5948030939719406793, guid: 38d1e3438a10fa64098a90ae956778c9,
+        type: 3}
+      pack: Dry
   salt: 31
   categoryId: shrubs
   category: Arbustos
-  attemptsPerChunk: 20
+  attemptsPerChunk: 10
   minSpacing: 1.5
+  spacingByDensity: 0
+  spacingJitter: 0.15
+  zoneSource: {fileID: 11400000, guid: 7d7a82924a5858242848e4cac7d21bca, type: 2}
+  zones: []
+  zoneSize: 160
+  mixByPreference: 0
+  lowForestShares: {x: 0.5, y: 0.3, z: 0.2}
+  highForestShares: {x: 0.35, y: 0.35, z: 0.3}
+  forestMixSize: 180
+  forestMixContrast: 3
+  forestMixBias: 0
   clustering: 0.5
   clusterSize: 25
   maxSlope: 40

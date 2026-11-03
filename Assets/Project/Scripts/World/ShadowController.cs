@@ -10,7 +10,7 @@ namespace PROCEDURAL_GAME.World
     /// - luz direcional: desligada, dura (Baixa) ou suave (Média e Alta);
     /// - URP: distância das sombras, definida no bioma (quanto menor, mais nítidas e mais baratas), e uma cascata só;
     /// - objetos espalhados: cada um projeta sombra a partir do nível definido no seu ScatterProfile.
-    /// O terreno só recebe sombras (não projeta). A resolução do mapa de sombras (2048) vem do asset do URP: no URP 14 ela não
+    /// O terreno só recebe sombras (não projeta). A resolução do mapa de sombras (1024) e a qualidade do filtro suave (Low, 4 amostras) vêm do asset do URP: no URP 14 ela não
     /// muda em tempo de execução, então os níveis variam a distância.
     /// Nasce sozinho junto com o <see cref="WorldGenerator"/>; confere o nível todo frame (comparar dois inteiros).
     /// </summary>
@@ -64,7 +64,7 @@ namespace PROCEDURAL_GAME.World
                 if (level > 0)
                 {
                     // A distância vem do bioma (Biome Profile > Sombras): neblina mais densa pede sombras mais curtas.
-                    urp.shadowDistance = world.Biome != null ? world.Biome.GetShadowDistance(level) : 30f;
+                    urp.shadowDistance = world.Biome != null ? world.Biome.GetShadowDistance(level) : 25f;
                     urp.shadowCascadeCount = 1;
                 }
 

@@ -28,7 +28,10 @@ namespace PROCEDURAL_GAME.World
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.ExponentialSquared;
             RenderSettings.fogColor = biome.fogColor;
-            RenderSettings.fogDensity = biome.fogDensity;
+            // A densidade vem da distância de visão escolhida (menu Desempenho), não do bioma: a neblina cobre tudo nessa distância.
+            // O ViewDistanceController a mantém atualizada; aqui só nasce no valor certo.
+            WorldGenerator world = GetComponent<WorldGenerator>();
+            RenderSettings.fogDensity = ViewDistance.FogDensityFor(world.ViewDistanceMeters);
 
             RenderSettings.ambientMode = AmbientMode.Flat;
             RenderSettings.ambientLight = biome.ambientColor;

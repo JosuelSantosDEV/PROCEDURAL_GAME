@@ -31,9 +31,6 @@ namespace PROCEDURAL_GAME.World
         [SerializeField, Range(4, 128)] private int resolution = 32;
 
         [Header("Carregamento")]
-        [Tooltip("Distância de visão, em chunks. Cresce ao quadrado: 4 ≈ 50 chunks, 6 ≈ 110 chunks.")]
-        [SerializeField, Range(1, 12)] private int viewRadius = 4;
-
         [Tooltip("Chunks ao redor do Player criados de uma vez no início, antes do primeiro frame. Evita o Player cair no vazio.")]
         [SerializeField, Range(1, 3)] private int initialRadius = 1;
 
@@ -62,13 +59,19 @@ namespace PROCEDURAL_GAME.World
         private readonly List<Vector2Int> toRelease = new List<Vector2Int>();
         private readonly List<Vector2Int> repopulateQueue = new List<Vector2Int>();
 
-        // 0 = sem ajuste; senão, raio imposto pela qualidade automática (sempre menor que o base).
-        private int viewRadiusOverride;
+        // A distância de visão (m) vem do menu Desempenho (Perto/Médio/Longe) e é reduzida pela qualidade automática, sempre
+        // por meio do ViewDistanceController. O mundo carrega todo chunk que toca o círculo dessa distância ao redor do Player.
+        private float viewDistance;
+        private Vector3 lastRefreshPosition;
+        private Vector3 sortPosition;
+        private System.Comparison<Vector2Int> farthestFirst;
+
+        // Chunks só são descartados bem além de onde são carregados (histerese): andar na divisa não cria e apaga o mesmo chunk.
+        private const float ReleaseMargin = 24f;
 
         private TerrainNoise terrainNoise;
         private ChunkMeshBuilder meshBuilder;
         private ScatterSpawner scatter;
-        private Vector2Int lastCenter;
         private bool hasCenter;
 
         /// <summary>Seed em uso (útil para reproduzir um mundo que você gostou).</summary>
@@ -77,25 +80,22 @@ namespace PROCEDURAL_GAME.World
         /// <summary>Perfil visual em uso (cores do terreno e atmosfera).</summary>
         public BiomeProfile Biome => biome;
 
-        /// <summary>Raio de carregamento do bioma, em chunks: o dele, se definir um, senão o do World. É o máximo da qualidade automática.</summary>
-        public int BaseViewRadius => biome != null && biome.viewRadius > 0 ? biome.viewRadius : viewRadius;
-
-        /// <summary>Raio em uso agora, em chunks: o ajuste da qualidade automática, se houver, senão o base.</summary>
-        public int ViewRadius => viewRadiusOverride > 0 ? viewRadiusOverride : BaseViewRadius;
+        /// <summary>Distância de visão em uso, em metros: o mundo carrega tudo o que está a esta distância do Player.</summary>
+        public float ViewDistanceMeters => viewDistance;
 
         public float ChunkSize => chunkSize;
 
         /// <summary>
-        /// Muda o raio de carregamento em jogo (qualidade automática). Chunks que ficam fora são devolvidos ao pool
-        /// e os que faltam entram na fila normal. Um valor igual ou maior que o base remove o ajuste.
+        /// Muda a distância de carregamento (menu Desempenho ou qualidade automática). Chunks que ficam fora são devolvidos
+        /// ao pool e os que faltam entram na fila normal.
         /// </summary>
-        public void SetViewRadiusOverride(int radius)
+        public void SetViewDistance(float meters)
         {
-            int value = radius >= BaseViewRadius ? 0 : Mathf.Max(1, radius);
-            if (value == viewRadiusOverride) return;
+            meters = Mathf.Max(chunkSize, meters);
+            if (Mathf.Approximately(meters, viewDistance)) return;
 
-            viewRadiusOverride = value;
-            if (hasCenter) RefreshChunks(lastCenter);
+            viewDistance = meters;
+            if (hasCenter) RefreshChunks(target.position);
         }
 
         /// <summary>
@@ -152,6 +152,9 @@ namespace PROCEDURAL_GAME.World
                 biome = ScriptableObject.CreateInstance<BiomeProfile>();
             }
 
+            viewDistance = Mathf.Max(chunkSize, PerformanceSettings.GetViewDistance());
+            farthestFirst = (a, b) => SqrDistanceToChunkCenter(b, sortPosition).CompareTo(SqrDistanceToChunkCenter(a, sortPosition));
+
             if (randomSeed) seed = Random.Range(int.MinValue, int.MaxValue);
             Debug.Log($"Mundo gerado com a seed {seed}.");
 
@@ -165,6 +168,9 @@ namespace PROCEDURAL_GAME.World
 
             // Aplica o nível de sombras do menu (luz, URP e objetos). Nasce junto: não exige refazer a cena.
             if (GetComponent<ShadowController>() == null) gameObject.AddComponent<ShadowController>();
+
+            // Neblina e plano de corte da câmera acompanham a distância de visão.
+            if (GetComponent<ViewDistanceController>() == null) gameObject.AddComponent<ViewDistanceController>();
         }
 
         private void Start()
@@ -175,14 +181,15 @@ namespace PROCEDURAL_GAME.World
 
         private void Update()
         {
-            Vector2Int center = WorldToChunk(target.position);
-
-            // Só reavalia o que carregar/descartar quando o Player muda de chunk.
-            if (!hasCenter || center != lastCenter)
+            // Reavalia o que carregar/descartar a cada RefreshStep metros andados (e não só ao trocar de chunk): o que o
+            // Player enxerga é um círculo em metros, e a borda de um chunk pode estar perto demais mesmo no meio dele.
+            Vector3 position = target.position;
+            float movedX = position.x - lastRefreshPosition.x;
+            float movedZ = position.z - lastRefreshPosition.z;
+            if (!hasCenter || movedX * movedX + movedZ * movedZ >= ViewDistance.RefreshStep * ViewDistance.RefreshStep)
             {
-                lastCenter = center;
                 hasCenter = true;
-                RefreshChunks(center);
+                RefreshChunks(position);
             }
 
             BuildPendingChunks();
@@ -235,17 +242,25 @@ namespace PROCEDURAL_GAME.World
             if (controller != null) controller.enabled = true;
         }
 
-        /// <summary>Descarta o que ficou longe e lista, do mais perto ao mais longe, o que falta criar.</summary>
-        private void RefreshChunks(Vector2Int center)
+        /// <summary>
+        /// Descarta o que ficou longe e lista, do mais perto ao mais longe, o que falta criar. Carrega todo chunk que toca o
+        /// círculo de (distância de visão + passo de reavaliação) ao redor do Player: assim, até a próxima reavaliação, tudo
+        /// o que está dentro da distância de visão existe, em qualquer direção (um raio contado em chunks deixava buracos nas diagonais).
+        /// </summary>
+        private void RefreshChunks(Vector3 position)
         {
-            // Descarta com uma folga de 1 chunk além do raio de carregamento. Sem isso, andar na divisa
-            // criaria e apagaria o mesmo chunk toda hora.
-            int radius = ViewRadius;
-            int releaseRadius = radius + 1;
+            lastRefreshPosition = position;
+            Vector2Int center = WorldToChunk(position);
+
+            float loadDistance = viewDistance + ViewDistance.RefreshStep;
+            float loadSqr = loadDistance * loadDistance;
+            float releaseDistance = loadDistance + ReleaseMargin;
+            float releaseSqr = releaseDistance * releaseDistance;
+
             toRelease.Clear();
             foreach (KeyValuePair<Vector2Int, TerrainChunk> pair in activeChunks)
             {
-                if (SqrDistance(pair.Key, center) > releaseRadius * releaseRadius) toRelease.Add(pair.Key);
+                if (SqrDistanceToChunk(pair.Key, position) > releaseSqr) toRelease.Add(pair.Key);
             }
 
             foreach (Vector2Int coord in toRelease)
@@ -257,24 +272,42 @@ namespace PROCEDURAL_GAME.World
             }
 
             pending.Clear();
-            for (int dz = -radius; dz <= radius; dz++)
+            int range = Mathf.CeilToInt(loadDistance / chunkSize) + 1;
+            for (int dz = -range; dz <= range; dz++)
             {
-                for (int dx = -radius; dx <= radius; dx++)
+                for (int dx = -range; dx <= range; dx++)
                 {
-                    if (dx * dx + dz * dz > radius * radius) continue;
-
                     Vector2Int coord = new Vector2Int(center.x + dx, center.y + dz);
+                    if (SqrDistanceToChunk(coord, position) > loadSqr) continue;
                     if (!activeChunks.ContainsKey(coord)) pending.Add(coord);
                 }
             }
 
             // Ordem decrescente de distância: assim tiramos sempre do fim da lista (barato) e o mais perto sai primeiro.
-            pending.Sort((a, b) => SqrDistance(b, center).CompareTo(SqrDistance(a, center)));
+            sortPosition = position;
+            pending.Sort(farthestFirst);
 
             foreach (KeyValuePair<Vector2Int, TerrainChunk> pair in activeChunks)
             {
                 pair.Value.SetScatterCollisions(IsNearForCollision(pair.Key, center));
             }
+        }
+
+        // Distância ao quadrado do ponto até o retângulo do chunk (0 se estiver dentro dele).
+        private float SqrDistanceToChunk(Vector2Int coord, Vector3 point)
+        {
+            float minX = coord.x * chunkSize;
+            float minZ = coord.y * chunkSize;
+            float dx = Mathf.Max(minX - point.x, 0f, point.x - (minX + chunkSize));
+            float dz = Mathf.Max(minZ - point.z, 0f, point.z - (minZ + chunkSize));
+            return dx * dx + dz * dz;
+        }
+
+        private float SqrDistanceToChunkCenter(Vector2Int coord, Vector3 point)
+        {
+            float dx = (coord.x + 0.5f) * chunkSize - point.x;
+            float dz = (coord.y + 0.5f) * chunkSize - point.z;
+            return dx * dx + dz * dz;
         }
 
         private bool IsNearForCollision(Vector2Int coord, Vector2Int center)

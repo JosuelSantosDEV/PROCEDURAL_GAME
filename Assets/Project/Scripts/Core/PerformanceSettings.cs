@@ -106,6 +106,40 @@ namespace PROCEDURAL_GAME.Core
         /// <summary>Nível de sombras que vale agora: a escolha do jogador menos o corte da qualidade automática.</summary>
         public static int EffectiveShadowLevel => Mathf.Max(ShadowOff, GetShadowLevel() - AutoShadowReduction);
 
+        // Distância de visão: 0 = Perto, 1 = Médio (padrão), 2 = Longe. Define até onde o mundo é carregado, a neblina que
+        // cobre tudo nessa distância e o plano de corte da câmera (ver World/ViewDistance e ViewDistanceController).
+        public const int ViewNear = 0;
+        public const int ViewMedium = 1;
+        public const int ViewFar = 2;
+        public const int DefaultViewLevel = ViewMedium;
+
+        // Metros de cada nível. A neblina cobre 100% (~99,99%) a esta distância.
+        private static readonly float[] ViewDistances = { 64f, 96f, 128f };
+
+        private const string ViewLevelKey = "view.level";
+
+        // -1 = ainda não lido do PlayerPrefs.
+        private static int viewLevelCache = -1;
+
+        /// <summary>Nível de distância de visão escolhido pelo jogador (é o teto da qualidade automática).</summary>
+        public static int GetViewLevel()
+        {
+            if (viewLevelCache < 0) viewLevelCache = Mathf.Clamp(PlayerPrefs.GetInt(ViewLevelKey, DefaultViewLevel), ViewNear, ViewFar);
+            return viewLevelCache;
+        }
+
+        public static void SetViewLevel(int level)
+        {
+            viewLevelCache = Mathf.Clamp(level, ViewNear, ViewFar);
+            PlayerPrefs.SetInt(ViewLevelKey, viewLevelCache);
+        }
+
+        /// <summary>Distância de visão do nível escolhido, em metros.</summary>
+        public static float GetViewDistance() => ViewDistances[GetViewLevel()];
+
+        /// <summary>Distância de visão de um nível (0 a 2), em metros.</summary>
+        public static float GetViewDistance(int level) => ViewDistances[Mathf.Clamp(level, ViewNear, ViewFar)];
+
         // Qualidade automática: o jogo mede o FPS e ajusta raio de visão e quantidade de objetos para chegar no FPS desejado.
         public const int MinAutoFps = 15;
         public const int MaxAutoFps = 60;
@@ -135,7 +169,7 @@ namespace PROCEDURAL_GAME.Core
 
         public static void SetSavedAutoLevel(string biomeName, int level) => PlayerPrefs.SetInt(AutoLevelKeyPrefix + biomeName, level);
 
-        /// <summary>Apaga as escolhas gerais (FPS alvo, contador, qualidade automática e sombras): voltam a valer os valores da cena.</summary>
+        /// <summary>Apaga as escolhas gerais (FPS alvo, contador, qualidade automática, sombras e distância de visão): voltam a valer os valores da cena.</summary>
         public static void ResetGeneral()
         {
             PlayerPrefs.DeleteKey(TargetFpsKey);
@@ -143,7 +177,9 @@ namespace PROCEDURAL_GAME.Core
             PlayerPrefs.DeleteKey(AutoQualityKey);
             PlayerPrefs.DeleteKey(AutoFpsKey);
             PlayerPrefs.DeleteKey(ShadowLevelKey);
+            PlayerPrefs.DeleteKey(ViewLevelKey);
             shadowLevelCache = -1;
+            viewLevelCache = -1;
         }
 
         /// <summary>Grava no disco. Chamar ao sair da tela de opções ou iniciar o jogo (PlayerPrefs só persiste ao salvar/fechar).</summary>
@@ -157,6 +193,7 @@ namespace PROCEDURAL_GAME.Core
             AutoQualityFactor = 1f;
             AutoShadowReduction = 0;
             shadowLevelCache = -1;
+            viewLevelCache = -1;
         }
     }
 }

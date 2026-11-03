@@ -17,8 +17,9 @@ MonoBehaviour:
   - id: 5Arms
     displayName: 5Arms
     elevation: -1
-    colliderScale: 1
+    colliderScale: 4.5
     weight: 1
+    preference: 3
     variants:
     - prefab: {fileID: 8159934549436868969, guid: 836c55ec6df8bbc4798b96a5f3b06605,
         type: 3}
@@ -79,6 +80,7 @@ MonoBehaviour:
     elevation: -0.7
     colliderScale: 1
     weight: 1
+    preference: 2
     variants:
     - prefab: {fileID: 1158315107734446513, guid: 5dde5d6d61cdf3148a2c375743cdbda3,
         type: 3}
@@ -142,6 +144,7 @@ MonoBehaviour:
     elevation: -0.3
     colliderScale: 1
     weight: 1
+    preference: 2
     variants:
     - prefab: {fileID: 6822938191050405255, guid: 7ca53bd5eda266340a30f18d0ca67a82,
         type: 3}
@@ -202,6 +205,7 @@ MonoBehaviour:
     elevation: -0.5
     colliderScale: 1
     weight: 1
+    preference: 2
     variants:
     - prefab: {fileID: 9058549242634023507, guid: ca8c1eb372982594db56d84d4cb5196e,
         type: 3}
@@ -262,6 +266,7 @@ MonoBehaviour:
     elevation: -0.3
     colliderScale: 1
     weight: 1
+    preference: 1
     variants:
     - prefab: {fileID: 8103837834828700995, guid: 62a45ec9787dd08419a4e700915fab9d,
         type: 3}
@@ -320,8 +325,9 @@ MonoBehaviour:
   - id: TallThin
     displayName: TallThin
     elevation: -1
-    colliderScale: 1
+    colliderScale: 1.2
     weight: 1
+    preference: 2
     variants:
     - prefab: {fileID: 3790195186264229885, guid: 26a505d5c079236498862e212561a4ab,
         type: 3}
@@ -382,6 +388,7 @@ MonoBehaviour:
     elevation: -0.5
     colliderScale: 1
     weight: 1
+    preference: 2
     variants:
     - prefab: {fileID: 936222653556443433, guid: 58a43e51d1be72d4ca00c89d5cc874ff,
         type: 3}
@@ -440,8 +447,9 @@ MonoBehaviour:
   - id: Tree_single
     displayName: Tree_single
     elevation: -1.5
-    colliderScale: 1
+    colliderScale: 5
     weight: 1
+    preference: 3
     variants:
     - prefab: {fileID: 941729880670408904, guid: 082224a278e707748aa8356524176db3,
         type: 3}
@@ -500,8 +508,9 @@ MonoBehaviour:
   - id: Tree
     displayName: Tree
     elevation: -0.1
-    colliderScale: 1
+    colliderScale: 0.1
     weight: 1
+    preference: 1
     variants:
     - prefab: {fileID: 334101629682778213, guid: 50640c19494aacc488bd45390ab212e4,
         type: 3}
@@ -560,8 +569,9 @@ MonoBehaviour:
   - id: young2
     displayName: young2
     elevation: -0.1
-    colliderScale: 1
+    colliderScale: 0.1
     weight: 1
+    preference: 2
     variants:
     - prefab: {fileID: 1569752713798337573, guid: 982c5a4b8e7ad6d44b508faa26548d9c,
         type: 3}
@@ -620,8 +630,9 @@ MonoBehaviour:
   - id: Jungle1
     displayName: Jungle1
     elevation: -10
-    colliderScale: 1
+    colliderScale: 7
     weight: 1
+    preference: 3
     variants:
     - prefab: {fileID: 8457407402949891741, guid: 48ffcfb2d5da6e34ba4b56f4d1b8cc1e,
         type: 3}
@@ -646,6 +657,7 @@ MonoBehaviour:
     elevation: -1
     colliderScale: 1
     weight: 1
+    preference: 2
     variants:
     - prefab: {fileID: 2123617075329345922, guid: c838fa2cbafbb2d489b6695d53a61aa6,
         type: 3}
@@ -659,8 +671,32 @@ MonoBehaviour:
   salt: 17
   categoryId: trees
   category: "\xC1rvores"
-  attemptsPerChunk: 9
+  attemptsPerChunk: 5.4
   minSpacing: 3.5
+  spacingByDensity: 1
+  spacingJitter: 0.15
+  zoneSource: {fileID: 0}
+  zones:
+  - id: Autumn
+    packs:
+    - Autumn
+    - Dry
+  - id: Spring
+    packs:
+    - Spring
+    - Green
+  - id: Summer
+    packs:
+    - Summer
+    - Misc
+    - Green
+  zoneSize: 160
+  mixByPreference: 1
+  lowForestShares: {x: 0.5, y: 0.3, z: 0.2}
+  highForestShares: {x: 0.35, y: 0.35, z: 0.3}
+  forestMixSize: 180
+  forestMixContrast: 3
+  forestMixBias: 0
   clustering: 0.25
   clusterSize: 70
   maxSlope: 28

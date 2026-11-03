@@ -24,11 +24,11 @@ MonoBehaviour:
   rockSlopeFull: 0.62
   colorVariation: 0.15
   fogColor: {r: 0.4, g: 0.46, b: 0.44, a: 1}
-  fogDensity: 0.024
-  ambientColor: {r: 0.22, g: 0.26, b: 0.26, a: 1}
+  fogDensity: 0.035
+  ambientColor: {r: 0.165, g: 0.195, b: 0.195, a: 1}
   lightColor: {r: 0.7, g: 0.76, b: 0.8, a: 1}
   lightIntensity: 0.65
-  viewRadius: 3
+  viewRadius: 2
   scatter:
   - {fileID: 11400000, guid: 7d7a82924a5858242848e4cac7d21bca, type: 2}
   - {fileID: 11400000, guid: 934ecc3dba9e64e4d91c441243ffbc4f, type: 2}

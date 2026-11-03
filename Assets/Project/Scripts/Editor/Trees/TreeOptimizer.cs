@@ -44,6 +44,10 @@ namespace PROCEDURAL_GAME.EditorTools
         private const int MinTrianglesForLod1 = 400;     // árvore menor que isto não ganha LOD1 (só some a distância)
         private const float MaxLod1Ratio = 0.75f;        // LOD1 só vale se tiver no máximo esta fração dos triângulos do LOD0
 
+        // ---- Centro do tronco (para o colisor) ----
+        private const float TrunkSliceFraction = 0.2f;   // a base do tronco = esta fração mais baixa da altura da madeira
+        private const float MinTrunkSlice = 0.3f;        // fatia mínima, em metros do prefab (árvores muito baixas)
+
         // Nomes usados no modo de teste (poucas árvores para conferir o resultado antes de converter tudo).
         private static readonly HashSet<string> TestNames = new HashSet<string>
         {
@@ -364,6 +368,7 @@ namespace PROCEDURAL_GAME.EditorTools
 
             GameObject source = AssetDatabase.LoadAssetAtPath<GameObject>(sourcePath);
             GameObject prefabRoot = new GameObject(outputName);
+            Vector3 trunkCenter = Vector3.zero;
             try
             {
                 prefabRoot.transform.localScale = source.transform.localScale;
@@ -385,6 +390,15 @@ namespace PROCEDURAL_GAME.EditorTools
                 group.SetLODs(BuildLods(lod0Renderer, lod1Renderer, lod1Height, cullHeight));
                 group.RecalculateBounds();
 
+                // Marcador do centro da base do tronco: o jogo centra o colisor nele (o pivô de alguns modelos não é o tronco).
+                if (!groundCover)
+                {
+                    trunkCenter = FindTrunkCenter(geometry);
+                    GameObject marker = new GameObject(PROCEDURAL_GAME.World.ScatterInstance.TrunkCenterName);
+                    marker.transform.SetParent(prefabRoot.transform, false);
+                    marker.transform.localPosition = trunkCenter;
+                }
+
                 PrefabUtility.SaveAsPrefabAsset(prefabRoot, output);
             }
             finally
@@ -396,6 +410,7 @@ namespace PROCEDURAL_GAME.EditorTools
             if (geometry.MirroredPieces > 0) notes.Add($"{geometry.MirroredPieces} peça(s) espelhada(s) corrigida(s)");
             if (geometry.MissingTangents) notes.Add("tangentes recalculadas");
             if (lod1Mesh == null) notes.Add(groundCover ? "sem LOD1 (vegetação rasteira)" : "sem LOD1");
+            if (!groundCover) notes.Add($"centro do tronco x {trunkCenter.x:0.00} z {trunkCenter.z:0.00}");
 
             return $"{sourcePath} -> {output} | {pieces.Count} peças -> 1 renderer, {geometry.Materials.Count} material(is) | " +
                    $"{lod0Triangles} / {(lod1Mesh != null ? lod1Triangles.ToString() : "-")} tri | {vertices} vért | {string.Join("; ", notes)}";
@@ -649,6 +664,75 @@ namespace PROCEDURAL_GAME.EditorTools
             mesh.RecalculateBounds();
             MeshUtility.Optimize(mesh);
             return mesh;
+        }
+
+        /// <summary>
+        /// Centro (x, z) da base do tronco, no espaço do prefab; y é o ponto mais baixo da madeira. Madeira = componentes
+        /// grandes da malha (os cartões de folha, pequenos, ficam de fora); base = a fatia mais baixa dela. O centro é o da
+        /// caixa da fatia, não a média dos vértices, para vários troncos juntos (SkinnyBunches) ou raízes largas (Jungle1)
+        /// darem o meio do conjunto em vez de pender para onde há mais triângulos.
+        /// </summary>
+        private static Vector3 FindTrunkCenter(Geometry geometry)
+        {
+            int vertexCount = geometry.Vertices.Count;
+            int[] parent = new int[vertexCount];
+            for (int i = 0; i < vertexCount; i++) parent[i] = i;
+
+            foreach (List<int> triangles in geometry.Triangles)
+            {
+                for (int t = 0; t < triangles.Count; t += 3)
+                {
+                    Union(parent, triangles[t], triangles[t + 1]);
+                    Union(parent, triangles[t + 1], triangles[t + 2]);
+                }
+            }
+
+            int[] componentTriangles = new int[vertexCount];
+            foreach (List<int> triangles in geometry.Triangles)
+            {
+                for (int t = 0; t < triangles.Count; t += 3) componentTriangles[Find(parent, triangles[t])]++;
+            }
+
+            // Sem madeira reconhecível (árvore feita só de peças pequenas), usa todos os vértices.
+            bool[] isWood = new bool[vertexCount];
+            float minY = float.MaxValue;
+            float maxY = float.MinValue;
+            for (int v = 0; v < vertexCount; v++)
+            {
+                isWood[v] = componentTriangles[Find(parent, v)] > SmallComponentTriangles;
+                if (!isWood[v]) continue;
+
+                minY = Mathf.Min(minY, geometry.Vertices[v].y);
+                maxY = Mathf.Max(maxY, geometry.Vertices[v].y);
+            }
+
+            if (minY > maxY)
+            {
+                for (int v = 0; v < vertexCount; v++)
+                {
+                    isWood[v] = true;
+                    minY = Mathf.Min(minY, geometry.Vertices[v].y);
+                    maxY = Mathf.Max(maxY, geometry.Vertices[v].y);
+                }
+            }
+
+            if (vertexCount == 0) return Vector3.zero;
+
+            float sliceTop = minY + Mathf.Max((maxY - minY) * TrunkSliceFraction, MinTrunkSlice);
+            float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+
+            for (int v = 0; v < vertexCount; v++)
+            {
+                Vector3 position = geometry.Vertices[v];
+                if (!isWood[v] || position.y > sliceTop) continue;
+
+                minX = Mathf.Min(minX, position.x);
+                maxX = Mathf.Max(maxX, position.x);
+                minZ = Mathf.Min(minZ, position.z);
+                maxZ = Mathf.Max(maxZ, position.z);
+            }
+
+            return new Vector3((minX + maxX) * 0.5f, minY, (minZ + maxZ) * 0.5f);
         }
 
         private static int Find(int[] parent, int index)

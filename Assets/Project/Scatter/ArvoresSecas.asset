@@ -38,3 +38,5 @@ MonoBehaviour:
   castShadowsFromLevel: 1
   collision: 1
   trunkRadius: 0.4
+  spacingByDensity: 1
+  spacingJitter: 0.15

@@ -23,8 +23,8 @@ namespace PROCEDURAL_GAME.EditorTools
 
         // Tentativas por chunk da Floresta_01 (a densidade de cada tipo é ajustada separadamente, em seu próprio perfil).
         // Árvores: 9 (já foram 30 e depois 18). Arbustos: 20 (já foram 40).
-        private const int LeafyTreesAttempts = 9;
-        private const int ShrubsAttempts = 20;
+        private const float LeafyTreesAttempts = 5.4f;
+        private const float ShrubsAttempts = 10f;
 
         // Afundamento fixo, em metros por unidade de escala. Árvores secas: o valor de sempre. Árvores folhosas: 0, porque a
         // altura vem inteira do grupo de cada tipo (ScatterProfile.groups, valores absolutos medidos em metros).
@@ -38,6 +38,7 @@ namespace PROCEDURAL_GAME.EditorTools
         private const string MiscFolder = TreesRoot + "/Misc";
         private const string LegacyRoot = "Assets/Mobile_FV/";
         private const string LeafyTreesAssetPath = "Assets/Project/Scatter/ArvoresMobile.asset";
+        private const string ShrubsAssetPath = "Assets/Project/Scatter/Arbustos.asset";
         private const string GroundCoverFolder = TreesRoot + "/GroundCover";
         private const string RocksFolder = "Assets/Pizza&Games/Realistic Rocks/Prefabs";
 
@@ -57,6 +58,8 @@ namespace PROCEDURAL_GAME.EditorTools
                 profile.sinkDepth = DeadTreesSinkDepth;
                 profile.collision = ScatterCollision.Trunk;
                 profile.trunkRadius = 0.4f;
+                profile.spacingByDensity = true;
+                profile.spacingJitter = 0.15f;
             });
 
             // Árvores folhosas da Floresta_01: lista de variações organizada por tipo (ver RebuildTreeGroups).
@@ -73,16 +76,19 @@ namespace PROCEDURAL_GAME.EditorTools
                 profile.sinkDepth = LeafyTreesSinkDepth;
                 profile.collision = ScatterCollision.Trunk;
                 profile.trunkRadius = 0.3f;
+                profile.spacingByDensity = true;
+                profile.mixByPreference = true;
             });
 
             // Só monta os grupos se o perfil ainda não tem: valores que você ajustou (altura, colisor) nunca são sobrescritos.
             // Perfis ainda apontando para os prefabs originais do Mobile_FV passam para as versões otimizadas (com LOD).
             if (!leafyTrees.HasGroups || UsesLegacyPrefabs(leafyTrees)) RebuildTreeGroups(leafyTrees);
+            EnsureSeasonZones(leafyTrees);
 
-            // Arbustos: samambaias e touceiras do pacote (verão). Sem colisão: o Player passa por dentro.
+            // Arbustos: samambaias e touceiras, divididos em Verde e Seco (ver RebuildShrubGroups) e seguindo as zonas das árvores.
+            // Sem colisão: o Player passa por dentro.
             ScatterProfile shrubs = GetOrCreate("Arbustos", profile =>
             {
-                profile.prefabs = FindPrefabs(IsShrub, GroundCoverFolder);
                 profile.salt = 31;
                 profile.attemptsPerChunk = ShrubsAttempts;
                 profile.minSpacing = 1.5f;
@@ -95,19 +101,14 @@ namespace PROCEDURAL_GAME.EditorTools
                 profile.collision = ScatterCollision.None;
             });
 
-            if (UsesLegacyPrefabs(shrubs))
+            // Só monta os grupos se o perfil ainda não tem (ajustes seus ficam) ou se ainda aponta para os prefabs originais.
+            if (!shrubs.HasGroups || UsesLegacyPrefabs(shrubs)) RebuildShrubGroups(shrubs);
+
+            if (shrubs.zoneSource == null)
             {
-                GameObject[] optimized = FindPrefabs(IsShrub, GroundCoverFolder);
-                if (optimized.Length > 0)
-                {
-                    shrubs.prefabs = optimized;
-                    EditorUtility.SetDirty(shrubs);
-                    AssetDatabase.SaveAssets();
-                }
-                else
-                {
-                    Debug.LogWarning("Arbustos ainda usam prefabs do Mobile_FV: rode Trees > 3 - Build ALL e depois Create Procedural World.");
-                }
+                shrubs.zoneSource = leafyTrees;
+                EditorUtility.SetDirty(shrubs);
+                AssetDatabase.SaveAssets();
             }
 
             // Cada perfil entra numa categoria do menu de Desempenho. Só preenche se vazio: um nome que você mudou fica.
@@ -119,8 +120,8 @@ namespace PROCEDURAL_GAME.EditorTools
             // ainda for um dos valores que este script já usou; se você ajustou à mão, fica como está.
             RemoveSnowPrefabs(leafyTrees);
             RemoveSnowPrefabs(shrubs);
-            MigrateAttempts(leafyTrees, LeafyTreesAttempts, 30, 18);
-            MigrateAttempts(shrubs, ShrubsAttempts, 40);
+            MigrateAttempts(leafyTrees, LeafyTreesAttempts, 30, 18, 9);
+            MigrateAttempts(shrubs, ShrubsAttempts, 40, 20);
 
             ScatterProfile rocks = GetOrCreate("Pedras", profile => ConfigureRocks(profile, attempts: 8, salt: 23));
 
@@ -152,14 +153,18 @@ namespace PROCEDURAL_GAME.EditorTools
         // ---- Árvores folhosas organizadas por tipo (Floresta_01) ----
 
         private const string SpiralTreeId = "SpiralTree";
+        private const string MiscPack = "Misc";
 
-        // Tipo (trecho do nome do prefab) e altura inicial em metros em relação ao terreno, medida no Editor. Colisor começa em 1.
+        // Tipo (trecho do nome do prefab), altura inicial em metros em relação ao terreno, preferência (1 a 3, ver
+        // ScatterProfile.mixByPreference) e multiplicador do colisor, medidos no Editor. Só valem para tipos novos no perfil:
+        // o que já está gravado no perfil (por id) é mantido.
         // 'young1' não está na lista: os prefabs eram idênticos aos de 'Tree' (mesma malha e materiais) e foram apagados.
-        private static readonly (string id, float elevation)[] TreeTypes =
+        private static readonly (string id, float elevation, int preference, float collider)[] TreeTypes =
         {
-            ("5Arms", -1.0f), ("Curved", -0.7f), ("FullTree", -0.3f), ("SkinnyBunches", -0.5f), ("SkinnyTall", -0.3f),
-            ("TallThin", -1.0f), ("Tree_short", -0.5f), ("Tree_single", -1.5f), ("Tree", -0.1f),
-            ("young2", -0.1f), ("Jungle1", -10.0f), (SpiralTreeId, -1.0f)
+            ("5Arms", -1.0f, 3, 4.5f), ("Curved", -0.7f, 2, 1.0f), ("FullTree", -0.3f, 2, 1.0f),
+            ("SkinnyBunches", -0.5f, 2, 1.0f), ("SkinnyTall", -0.3f, 1, 1.0f), ("TallThin", -1.0f, 2, 1.2f),
+            ("Tree_short", -0.5f, 2, 1.0f), ("Tree_single", -1.5f, 3, 5.0f), ("Tree", -0.1f, 1, 0.1f),
+            ("young2", -0.1f, 2, 0.1f), ("Jungle1", -10.0f, 3, 7.0f), (SpiralTreeId, -1.0f, 2, 1.0f)
         };
 
         // Pacotes de estação usados nesta floresta; Winter não entra por enquanto (existe em Trees/Winter, para depois).
@@ -181,6 +186,53 @@ namespace PROCEDURAL_GAME.EditorTools
             return string.Join("|", ids);
         }
 
+        /// <summary>
+        /// Zonas de estação da floresta: cada zona do mundo usa árvores de uma única estação. Summer e Misc ficam juntas (são
+        /// parecidas). Só preenche se o perfil ainda não tem zonas: o que você mudou no Inspector fica.
+        /// </summary>
+        private static void EnsureSeasonZones(ScatterProfile profile)
+        {
+            bool changed = false;
+
+            if (profile.zones == null || profile.zones.Length == 0)
+            {
+                profile.zones = new[]
+                {
+                    new ScatterProfile.SeasonZone { id = "Autumn", packs = new[] { "Autumn" } },
+                    new ScatterProfile.SeasonZone { id = "Spring", packs = new[] { "Spring" } },
+                    new ScatterProfile.SeasonZone { id = "Summer", packs = new[] { "Summer", MiscPack } }
+                };
+                changed = true;
+            }
+
+            // Arbustos: o outono usa os secos; primavera e verão, os verdes. Só acrescenta se ainda não estiver na zona.
+            changed |= AddPackToZone(profile, "Autumn", DryShrubPack);
+            changed |= AddPackToZone(profile, "Spring", GreenShrubPack);
+            changed |= AddPackToZone(profile, "Summer", GreenShrubPack);
+
+            if (!changed) return;
+
+            EditorUtility.SetDirty(profile);
+            AssetDatabase.SaveAssets();
+        }
+
+        private static bool AddPackToZone(ScatterProfile profile, string zoneId, string pack)
+        {
+            foreach (ScatterProfile.SeasonZone zone in profile.zones)
+            {
+                if (zone == null || zone.id != zoneId) continue;
+
+                List<string> packs = new List<string>(zone.packs ?? Array.Empty<string>());
+                if (packs.Contains(pack)) return false;
+
+                packs.Add(pack);
+                zone.packs = packs.ToArray();
+                return true;
+            }
+
+            return false;
+        }
+
         [MenuItem("PROCEDURAL_GAME/Rebuild Tree Groups")]
         public static void RebuildTreeGroupsMenu()
         {
@@ -192,6 +244,9 @@ namespace PROCEDURAL_GAME.EditorTools
             }
 
             RebuildTreeGroups(profile);
+
+            ScatterProfile shrubs = AssetDatabase.LoadAssetAtPath<ScatterProfile>(ShrubsAssetPath);
+            if (shrubs != null) RebuildShrubGroups(shrubs);
         }
 
         /// <summary>
@@ -221,6 +276,8 @@ namespace PROCEDURAL_GAME.EditorTools
             {
                 string id = treeType.id;
                 float defaultElevation = treeType.elevation;
+                int defaultPreference = treeType.preference;
+                float defaultCollider = treeType.collider;
                 List<ScatterProfile.GroupVariant> variants = new List<ScatterProfile.GroupVariant>();
                 List<string> origin = new List<string>();
 
@@ -228,7 +285,7 @@ namespace PROCEDURAL_GAME.EditorTools
                 {
                     foreach (GameObject prefab in FindPrefabs(name => name.StartsWith(SpiralTreeId, StringComparison.Ordinal), MiscFolder))
                     {
-                        variants.Add(new ScatterProfile.GroupVariant { prefab = prefab, pack = "Misc" });
+                        variants.Add(new ScatterProfile.GroupVariant { prefab = prefab, pack = MiscPack });
                     }
 
                     origin.Add($"Misc {variants.Count}");
@@ -256,8 +313,9 @@ namespace PROCEDURAL_GAME.EditorTools
                     id = id,
                     displayName = id,
                     elevation = had ? old.elevation : defaultElevation,
-                    colliderScale = had ? old.colliderScale : 1f,
+                    colliderScale = had ? old.colliderScale : defaultCollider,
                     weight = had && old.weight > 0f ? old.weight : 1f,
+                    preference = had && old.preference >= 1 && old.preference <= 3 ? old.preference : defaultPreference,
                     variants = variants.ToArray()
                 });
 
@@ -280,7 +338,92 @@ namespace PROCEDURAL_GAME.EditorTools
             Debug.Log(message);
         }
 
-        private static bool IsShrub(string name) => name.StartsWith("Sm") && (name.Contains("fern") || name.Contains("WeedGroup"));
+        // ---- Arbustos: Verde e Seco ----
+
+        // Também são os nomes dos pacotes das variações (as zonas de ScatterProfile.zones escolhem por eles).
+        private const string GreenShrubPack = "Green";
+        private const string DryShrubPack = "Dry";
+
+        /// <summary>
+        /// "Dry" para os arbustos do pacote de outono (A1_, A2_: folhagem marrom/amarela/laranja), "Green" para primavera e verão
+        /// (S1_, S2_, Sm1_, Sm2_), nulo para o resto. Entram samambaias (fern, fernPlant) e touceiras de capim (grassBunch); ficam
+        /// de fora o Winter (ainda sem uso), as plantas soltas (grass, weed) e os WeedGroup (galhos que parecem árvore seca).
+        /// </summary>
+        private static string ShrubPackOf(string name)
+        {
+            if (name.Contains("WeedGroup")) return null;
+            if (!name.Contains("fern") && !name.Contains("grassBunch")) return null;
+
+            if (name.StartsWith("A1_", StringComparison.Ordinal) || name.StartsWith("A2_", StringComparison.Ordinal)) return DryShrubPack;
+
+            if (name.StartsWith("S1_", StringComparison.Ordinal) || name.StartsWith("S2_", StringComparison.Ordinal)
+                || name.StartsWith("Sm1_", StringComparison.Ordinal) || name.StartsWith("Sm2_", StringComparison.Ordinal))
+            {
+                return GreenShrubPack;
+            }
+
+            return null;
+        }
+
+        /// <summary>Refaz os grupos "Verde" e "Seco" do perfil de arbustos a partir de Assets/Project/Trees/GroundCover. Altura, colisor e peso já gravados (por id) ficam.</summary>
+        public static void RebuildShrubGroups(ScatterProfile profile)
+        {
+            Dictionary<string, ScatterProfile.PrefabGroup> previous = new Dictionary<string, ScatterProfile.PrefabGroup>();
+            if (profile.groups != null)
+            {
+                foreach (ScatterProfile.PrefabGroup group in profile.groups)
+                {
+                    if (group != null && !string.IsNullOrEmpty(group.id)) previous[group.id] = group;
+                }
+            }
+
+            GameObject[] found = FindPrefabs(name => ShrubPackOf(name) != null, GroundCoverFolder);
+            if (found.Length == 0)
+            {
+                Debug.LogError($"Nenhum arbusto encontrado em '{GroundCoverFolder}'. Rode PROCEDURAL_GAME > Trees > 3 - Build ALL antes; o perfil '{profile.name}' não foi alterado.");
+                return;
+            }
+
+            (string id, string displayName)[] kinds = { (GreenShrubPack, "Verde"), (DryShrubPack, "Seco") };
+            List<ScatterProfile.PrefabGroup> result = new List<ScatterProfile.PrefabGroup>();
+            List<string> report = new List<string>();
+
+            foreach (var kind in kinds)
+            {
+                List<ScatterProfile.GroupVariant> variants = new List<ScatterProfile.GroupVariant>();
+                foreach (GameObject prefab in found)
+                {
+                    if (ShrubPackOf(prefab.name) == kind.id) variants.Add(new ScatterProfile.GroupVariant { prefab = prefab, pack = kind.id });
+                }
+
+                if (variants.Count == 0)
+                {
+                    report.Add($"{kind.displayName}: nenhum prefab");
+                    continue;
+                }
+
+                bool had = previous.TryGetValue(kind.id, out ScatterProfile.PrefabGroup old);
+                result.Add(new ScatterProfile.PrefabGroup
+                {
+                    id = kind.id,
+                    displayName = kind.displayName,
+                    elevation = had ? old.elevation : 0f,
+                    colliderScale = had ? old.colliderScale : 1f,
+                    weight = had && old.weight > 0f ? old.weight : 1f,
+                    preference = 2,
+                    variants = variants.ToArray()
+                });
+
+                report.Add($"{kind.displayName}: {variants.Count} prefabs");
+            }
+
+            profile.groups = result.ToArray();
+            profile.prefabs = Array.Empty<GameObject>();
+            EditorUtility.SetDirty(profile);
+            AssetDatabase.SaveAssets();
+
+            Debug.Log($"Grupos de arbustos de '{profile.name}' refeitos:\n" + string.Join("\n", report));
+        }
 
         /// <summary>Verdadeiro se o perfil ainda usa algum prefab original do Mobile_FV (sem as otimizações de malha e LOD).</summary>
         private static bool UsesLegacyPrefabs(ScatterProfile profile)
@@ -464,9 +607,9 @@ namespace PROCEDURAL_GAME.EditorTools
             AssetDatabase.SaveAssets();
         }
 
-        private static void MigrateAttempts(ScatterProfile profile, int newValue, params int[] previousDefaults)
+        private static void MigrateAttempts(ScatterProfile profile, float newValue, params int[] previousDefaults)
         {
-            if (profile.attemptsPerChunk == newValue || Array.IndexOf(previousDefaults, profile.attemptsPerChunk) < 0) return;
+            if (Mathf.Approximately(profile.attemptsPerChunk, newValue) || Array.IndexOf(previousDefaults, Mathf.RoundToInt(profile.attemptsPerChunk)) < 0) return;
 
             profile.attemptsPerChunk = newValue;
             EditorUtility.SetDirty(profile);

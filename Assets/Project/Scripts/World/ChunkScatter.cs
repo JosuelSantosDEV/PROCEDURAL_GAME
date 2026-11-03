@@ -33,18 +33,35 @@ namespace PROCEDURAL_GAME.World
         // Distância usada para medir a inclinação do terreno, em metros.
         private const float SlopeStep = 1f;
 
+        // Menor lado de célula da grade, em metros (densidade altíssima não pode gerar milhares de células por chunk).
+        private const float MinGridCell = 1f;
+
+        // Desvio máximo do objeto dentro da célula, como fração do lado. Abaixo de 0,5 o ponto nunca sai da própria célula.
+        private const float MaxGridJitter = 0.45f;
+
+        // Deslocamento do ruído de mistura baixa/alta para não repetir o desenho do ruído de agrupamento.
+        private const int ForestMixSaltOffset = 7919;
+
+        // Deslocamento do sorteio das zonas (estações) para não repetir os outros sorteios do perfil.
+        private const int ZoneSaltOffset = 104729;
+
         private readonly TerrainNoise terrain;
         private readonly int seed;
         private readonly float chunkSize;
         private readonly float spawnClearSqr;
 
-        // Reaproveitada a cada chamada para não gerar lixo de memória.
+        // Reaproveitadas a cada chamada para não gerar lixo de memória.
         private readonly List<Vector2> accepted = new List<Vector2>();
+
+        // Por zona e por tipo: variações que podem nascer (da zona e liberadas pela calibração); por zona, soma dos pesos
+        // dos tipos em cada preferência (índices 1 a 3); e o peso final de cada tipo no ponto sorteado.
+        private List<int>[][] eligible = System.Array.Empty<List<int>[]>();
+        private float[][] tierWeightSum = System.Array.Empty<float[]>();
+        private float[] groupWeights = System.Array.Empty<float>();
 
         // Variações liberadas pela ferramenta de calibração (só usada quando ScatterTuning.HasFilter).
         private readonly List<int> enabledVariants = new List<int>();
-        private int[] enabledStart = System.Array.Empty<int>();
-        private int[] enabledCount = System.Array.Empty<int>();
+        private bool[] enabledFlags = System.Array.Empty<bool>();
 
         public ChunkScatter(TerrainNoise terrain, int seed, float chunkSize, float spawnClearRadius)
         {
@@ -67,95 +84,69 @@ namespace PROCEDURAL_GAME.World
             if (filtering)
             {
                 enabledVariants.Clear();
+                if (enabledFlags.Length < variants.Length) enabledFlags = new bool[variants.Length];
+
                 for (int v = 0; v < variants.Length; v++)
                 {
-                    if (ScatterTuning.IsEnabled(profile, in variants[v])) enabledVariants.Add(v);
+                    bool on = ScatterTuning.IsEnabled(profile, in variants[v]);
+                    enabledFlags[v] = on;
+                    if (on) enabledVariants.Add(v);
                 }
 
                 if (enabledVariants.Count == 0) return;
-
-                if (profile.HasGroups)
-                {
-                    int groupCount = profile.groups.Length;
-                    if (enabledStart.Length < groupCount)
-                    {
-                        enabledStart = new int[groupCount];
-                        enabledCount = new int[groupCount];
-                    }
-
-                    System.Array.Clear(enabledCount, 0, groupCount);
-
-                    // As variações liberadas seguem a ordem dos grupos, então as de cada grupo ficam seguidas na lista.
-                    for (int e = 0; e < enabledVariants.Count; e++)
-                    {
-                        int g = variants[enabledVariants[e]].group;
-                        if (enabledCount[g] == 0) enabledStart[g] = e;
-                        enabledCount[g]++;
-                    }
-                }
             }
 
             bool grouped = profile.HasGroups;
+            bool mix = grouped && profile.mixByPreference;
+            bool useZones = profile.UsesZones;
+            int zoneCount = profile.ZoneCount;
+            if (grouped) BuildEligible(profile, variants, filtering, zoneCount, useZones);
 
-            Random random = new Random(math.max(1u, math.hash(new int4(seed, coord.x, coord.y, profile.salt))));
             float originX = coord.x * chunkSize;
             float originZ = coord.y * chunkSize;
-            float spacingSqr = profile.minSpacing * profile.minSpacing;
+            float spacingSqr = profile.spacingByDensity ? 0f : profile.minSpacing * profile.minSpacing;
             float maxTerrainHeight = Mathf.Max(0.001f, terrain.MaxHeight);
             float minScale = Mathf.Min(profile.minScale, profile.maxScale);
             float maxScale = Mathf.Max(profile.minScale, profile.maxScale);
             float clusterFrequency = 1f / Mathf.Max(1f, profile.clusterSize);
 
-            // Densidade escolhida pelo jogador no menu de Desempenho. Reduzir só corta o fim da sequência de
-            // tentativas: os objetos que ficam continuam exatamente nos mesmos lugares.
-            int attempts = Mathf.RoundToInt(profile.attemptsPerChunk * PerformanceSettings.GetEffectiveDensity(profile.categoryId));
-
-            for (int i = 0; i < attempts; i++)
+            // Aplica as regras do terreno a uma posição já sorteada e, se passar, guarda o objeto.
+            void TryPlace(float x, float z, float pick, int drawn, float yaw, float scale, float clusterRoll)
             {
-                // Sorteia tudo antes de rejeitar: cada tentativa gasta sempre os mesmos números, então mudar
-                // uma regra (ex.: inclinação máxima) não embaralha as posições das outras tentativas.
-                float x = originX + random.NextFloat() * chunkSize;
-                float z = originZ + random.NextFloat() * chunkSize;
-
-                // Um único número sorteado por tentativa, como antes (as posições não mudam). Com grupos, ele escolhe
-                // primeiro o TIPO (pelo peso) e depois a variação dentro dele: cada tipo aparece com a mesma frequência,
-                // não importa quantas variações tenha. Com filtro, só o mapeamento para o que está liberado muda.
-                int variantIndex;
-                if (grouped)
-                {
-                    variantIndex = PickGroupedVariant(profile, random.NextFloat(), filtering);
-                }
-                else
-                {
-                    int drawn = random.NextInt(variants.Length);
-                    variantIndex = filtering ? enabledVariants[(int)((long)drawn * enabledVariants.Count / variants.Length)] : drawn;
-                }
-
-                float yaw = random.NextFloat(360f);
-                float scale = random.NextFloat(minScale, maxScale);
-                float clusterRoll = random.NextFloat();
-
-                if (x * x + z * z < spawnClearSqr) continue;
+                if (x * x + z * z < spawnClearSqr) return;
 
                 float height = terrain.GetHeight(x, z);
                 float normalizedHeight = height / maxTerrainHeight;
-                if (normalizedHeight < profile.minHeight || normalizedHeight > profile.maxHeight) continue;
+                if (normalizedHeight < profile.minHeight || normalizedHeight > profile.maxHeight) return;
 
                 float slopeX = terrain.GetHeight(x + SlopeStep, z) - terrain.GetHeight(x - SlopeStep, z);
                 float slopeZ = terrain.GetHeight(x, z + SlopeStep) - terrain.GetHeight(x, z - SlopeStep);
                 Vector3 normal = new Vector3(-slopeX, 2f * SlopeStep, -slopeZ).normalized;
                 float slope = Vector3.Angle(Vector3.up, normal);
-                if (slope > profile.maxSlope) continue;
+                if (slope > profile.maxSlope) return;
 
                 if (profile.clustering > 0f)
                 {
                     float cluster = terrain.GetCluster(x, z, clusterFrequency, profile.salt);
                     float chance = Mathf.Lerp(1f, Mathf.InverseLerp(ClusterMin, ClusterMax, cluster), profile.clustering);
-                    if (clusterRoll > chance) continue;
+                    if (clusterRoll > chance) return;
                 }
 
-                if (IsTooClose(x, z, spacingSqr)) continue;
+                if (IsTooClose(x, z, spacingSqr)) return;
                 accepted.Add(new Vector2(x, z));
+
+                // Com grupos, o número sorteado escolhe primeiro o TIPO (pelo peso ou pela mistura por preferência) e depois a
+                // variação dentro dele: cada tipo aparece com a mesma frequência, não importa quantas variações tenha.
+                int variantIndex;
+                if (grouped)
+                {
+                    variantIndex = PickGroupedVariant(profile, pick, mix, useZones ? ZoneAt(profile, x, z, zoneCount) : 0, x, z);
+                    if (variantIndex < 0) return;
+                }
+                else
+                {
+                    variantIndex = filtering ? enabledVariants[(int)((long)drawn * enabledVariants.Count / variants.Length)] : drawn;
+                }
 
                 Quaternion tilt = Quaternion.Slerp(Quaternion.identity, Quaternion.FromToRotation(Vector3.up, normal), profile.alignToSurface);
 
@@ -171,52 +162,255 @@ namespace PROCEDURAL_GAME.World
                     ColliderScale = ScatterTuning.GetColliderScale(profile, group)
                 });
             }
+
+            if (profile.spacingByDensity)
+            {
+                // GRADE: um objeto por célula de uma grade quadrada do mundo todo (cada um com 4 vizinhos à mesma distância),
+                // com um pequeno desvio aleatório. O lado da célula é a raiz da área por objeto desejado: mais densidade =
+                // células menores = objetos mais perto; menos densidade = mais longe. Como a grade é do mundo (não do chunk),
+                // o padrão continua igual na divisa entre chunks. Cada célula tem o próprio sorteio (função de seed + célula).
+                float target = profile.attemptsPerChunk * PerformanceSettings.GetDensity(profile.categoryId);
+                if (target <= 0f) return;
+
+                float cell = Mathf.Max(MinGridCell, chunkSize / Mathf.Sqrt(target));
+                float jitter = Mathf.Clamp(profile.spacingJitter, 0f, MaxGridJitter);
+
+                // A qualidade automática NÃO muda a grade (os objetos não andariam de lugar): tira uma fração das células ao acaso.
+                float keep = PerformanceSettings.AutoQualityFactor;
+
+                int firstX = Mathf.FloorToInt(originX / cell);
+                int lastX = Mathf.FloorToInt((originX + chunkSize) / cell);
+                int firstZ = Mathf.FloorToInt(originZ / cell);
+                int lastZ = Mathf.FloorToInt((originZ + chunkSize) / cell);
+
+                for (int cz = firstZ; cz <= lastZ; cz++)
+                {
+                    for (int cx = firstX; cx <= lastX; cx++)
+                    {
+                        Random cellRandom = new Random(ChunkSeed(new Vector2Int(cx, cz), profile));
+
+                        // O desvio é menor que meia célula: o ponto fica dentro da própria célula.
+                        float x = (cx + 0.5f + (cellRandom.NextFloat() * 2f - 1f) * jitter) * cell;
+                        float z = (cz + 0.5f + (cellRandom.NextFloat() * 2f - 1f) * jitter) * cell;
+
+                        float pick = 0f;
+                        int drawn = 0;
+                        if (grouped) pick = cellRandom.NextFloat();
+                        else drawn = cellRandom.NextInt(variants.Length);
+
+                        float yaw = cellRandom.NextFloat(360f);
+                        float scale = cellRandom.NextFloat(minScale, maxScale);
+                        float clusterRoll = cellRandom.NextFloat();
+                        float thin = cellRandom.NextFloat();
+
+                        // Cada ponto pertence a um só chunk (o que o contém).
+                        if (x < originX || x >= originX + chunkSize || z < originZ || z >= originZ + chunkSize) continue;
+                        if (thin >= keep) continue;
+
+                        TryPlace(x, z, pick, drawn, yaw, scale, clusterRoll);
+                    }
+                }
+
+                return;
+            }
+
+            // SORTEIO LIVRE (perfis sem grade, ex.: pedras e arbustos): posições ao acaso, com distância mínima fixa dentro do chunk.
+            Random random = new Random(ChunkSeed(coord, profile));
+
+            // Densidade escolhida pelo jogador no menu de Desempenho. Reduzir só corta o fim da sequência de
+            // tentativas: os objetos que ficam continuam exatamente nos mesmos lugares.
+            int attempts = Mathf.RoundToInt(profile.attemptsPerChunk * PerformanceSettings.GetEffectiveDensity(profile.categoryId));
+
+            for (int i = 0; i < attempts; i++)
+            {
+                // Sorteia tudo antes de rejeitar: cada tentativa gasta sempre os mesmos números, então mudar
+                // uma regra (ex.: inclinação máxima) não embaralha as posições das outras tentativas.
+                float x = originX + random.NextFloat() * chunkSize;
+                float z = originZ + random.NextFloat() * chunkSize;
+
+                float pick = 0f;
+                int drawn = 0;
+                if (grouped) pick = random.NextFloat();
+                else drawn = random.NextInt(variants.Length);
+
+                float yaw = random.NextFloat(360f);
+                float scale = random.NextFloat(minScale, maxScale);
+                float clusterRoll = random.NextFloat();
+
+                TryPlace(x, z, pick, drawn, yaw, scale, clusterRoll);
+            }
+        }
+
+        private uint ChunkSeed(Vector2Int coord, ScatterProfile profile)
+        {
+            return math.max(1u, math.hash(new int4(seed, coord.x, coord.y, profile.salt)));
         }
 
         /// <summary>
-        /// Escolhe o tipo (grupo) com probabilidade proporcional ao peso e, dentro dele, uma variação. Usa um só número
-        /// <paramref name="u"/> em [0,1): a parte que sobra depois de achar o tipo escolhe a variação.
+        /// Monta, para cada zona e cada tipo, a lista de variações que podem nascer (do pacote da zona e, com a ferramenta de
+        /// calibração, só as marcadas) e, por zona, a soma dos pesos dos tipos que têm alguma variação em cada preferência:
+        /// a fatia da preferência é dividida entre esses tipos.
         /// </summary>
-        private int PickGroupedVariant(ScatterProfile profile, float u, bool filtering)
+        private void BuildEligible(ScatterProfile profile, ScatterProfile.Variant[] variants, bool filtering, int zoneCount, bool useZones)
         {
             int groupCount = profile.groups.Length;
 
+            if (eligible.Length < zoneCount)
+            {
+                System.Array.Resize(ref eligible, zoneCount);
+                System.Array.Resize(ref tierWeightSum, zoneCount);
+            }
+
+            for (int z = 0; z < zoneCount; z++)
+            {
+                if (eligible[z] == null || eligible[z].Length < groupCount)
+                {
+                    eligible[z] = new List<int>[groupCount];
+                    for (int g = 0; g < groupCount; g++) eligible[z][g] = new List<int>();
+                }
+
+                if (tierWeightSum[z] == null) tierWeightSum[z] = new float[4];
+                System.Array.Clear(tierWeightSum[z], 0, tierWeightSum[z].Length);
+
+                for (int g = 0; g < groupCount; g++)
+                {
+                    List<int> list = eligible[z][g];
+                    list.Clear();
+
+                    int first = profile.GetGroupFirst(g);
+                    int length = profile.GetGroupLength(g);
+                    for (int k = 0; k < length; k++)
+                    {
+                        int v = first + k;
+                        if (filtering && !enabledFlags[v]) continue;
+
+                        // Variação de um pacote de outra zona não nasce aqui (máscara -1 = pacote sem zona: nasce em todas).
+                        if (useZones && (variants[v].zoneMask & (1 << z)) == 0) continue;
+
+                        list.Add(v);
+                    }
+
+                    if (list.Count > 0) tierWeightSum[z][profile.GetPreference(g)] += profile.GetGroupWeight(g);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Zona do ponto (x, z): um mapa de células irregulares (Voronoi). O mundo é dividido em quadrados de
+        /// <see cref="ScatterProfile.zoneSize"/> metros, cada um com um ponto-semente deslocado ao acaso e uma zona sorteada;
+        /// o ponto pertence à zona da semente mais próxima. Função só de seed + posição: o mesmo lugar é sempre da mesma zona
+        /// e a troca de uma zona para outra é seca (não há árvores de duas zonas intercaladas).
+        /// </summary>
+        private int ZoneAt(ScatterProfile profile, float x, float z, int zoneCount)
+        {
+            float size = Mathf.Max(20f, profile.ZoneSize);
+            int cellX = Mathf.FloorToInt(x / size);
+            int cellZ = Mathf.FloorToInt(z / size);
+
+            float bestDistance = float.MaxValue;
+            int bestZone = 0;
+
+            // Sementes ficam entre 15% e 85% da célula: a mais próxima sempre está nas 3x3 células em volta.
+            for (int dz = -1; dz <= 1; dz++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int sx = cellX + dx;
+                    int sz = cellZ + dz;
+                    uint hash = math.hash(new int4(seed, sx, sz, profile.ZoneSalt + ZoneSaltOffset));
+
+                    float px = (sx + 0.15f + 0.7f * ((hash & 0xFFFFu) / 65536f)) * size;
+                    float pz = (sz + 0.15f + 0.7f * (((hash >> 16) & 0xFFFFu) / 65536f)) * size;
+                    float distance = (px - x) * (px - x) + (pz - z) * (pz - z);
+                    if (distance >= bestDistance) continue;
+
+                    bestDistance = distance;
+                    bestZone = (int)(math.hash(new int4(sz, sx, seed, profile.ZoneSalt + ZoneSaltOffset + 1)) % (uint)zoneCount);
+                }
+            }
+
+            return bestZone;
+        }
+
+        /// <summary>
+        /// 0 = floresta baixa, 1 = floresta alta, em um ruído de variação lenta (manchas de <see cref="ScatterProfile.forestMixSize"/>
+        /// metros). Depende só da posição e do perfil: o mesmo lugar sempre é do mesmo tipo de floresta.
+        /// </summary>
+        private float ForestHeight(ScatterProfile profile, float x, float z)
+        {
+            float noise = terrain.GetCluster(x, z, 1f / Mathf.Max(20f, profile.forestMixSize), profile.salt + ForestMixSaltOffset);
+            float h = Mathf.Clamp01(0.5f + profile.forestMixBias * 0.5f + noise * profile.forestMixContrast * 0.5f);
+            return h * h * (3f - 2f * h);
+        }
+
+        /// <summary>Calcula o peso de cada tipo neste ponto e devolve a soma. Sem mistura, vale o 'Weight' do tipo.</summary>
+        private float FillGroupWeights(ScatterProfile profile, int zone, bool mix, float x, float z)
+        {
+            int groupCount = profile.groups.Length;
+            if (groupWeights.Length < groupCount) groupWeights = new float[groupCount];
+
+            Vector3 shares = mix ? Vector3.Lerp(profile.lowForestShares, profile.highForestShares, ForestHeight(profile, x, z)) : Vector3.zero;
+
             float total = 0f;
-            int lastEligible = -1;
             for (int g = 0; g < groupCount; g++)
             {
-                if (VariationsInGroup(profile, g, filtering) == 0) continue;
-                total += profile.GetGroupWeight(g);
-                lastEligible = g;
+                float weight = 0f;
+                if (eligible[zone][g].Count > 0)
+                {
+                    weight = profile.GetGroupWeight(g);
+
+                    if (mix)
+                    {
+                        int tier = profile.GetPreference(g);
+                        float share = tier == 1 ? shares.x : (tier == 2 ? shares.y : shares.z);
+                        weight = Mathf.Max(0f, share) * weight / tierWeightSum[zone][tier];
+                    }
+                }
+
+                groupWeights[g] = weight;
+                total += weight;
             }
+
+            return total;
+        }
+
+        /// <summary>
+        /// Escolhe o tipo (grupo) com probabilidade proporcional ao peso e, dentro dele, uma variação da zona. Usa um só
+        /// número <paramref name="u"/> em [0,1): a parte que sobra depois de achar o tipo escolhe a variação. Com
+        /// <paramref name="mix"/>, o peso de cada tipo vem da fatia da sua preferência no ponto (x, z). Devolve -1 se a zona
+        /// não tem nenhuma variação liberada.
+        /// </summary>
+        private int PickGroupedVariant(ScatterProfile profile, float u, bool mix, int zone, float x, float z)
+        {
+            float total = FillGroupWeights(profile, zone, mix, x, z);
+
+            // Todas as fatias liberadas valem zero (ex.: só sobrou um tipo cuja preferência tem fatia 0): volta aos pesos simples.
+            if (total <= 0f && mix) total = FillGroupWeights(profile, zone, false, x, z);
 
             float target = u * total;
             float lower = 0f;
             int chosen = -1;
             float chosenLower = 0f;
 
-            for (int g = 0; g < groupCount; g++)
+            for (int g = 0; g < profile.groups.Length; g++)
             {
-                if (VariationsInGroup(profile, g, filtering) == 0) continue;
+                if (groupWeights[g] <= 0f) continue;
 
                 chosen = g;
                 chosenLower = lower;
-                lower += profile.GetGroupWeight(g);
+                lower += groupWeights[g];
 
                 // O último tipo elegível recebe o resto: evita falha por arredondamento de float.
-                if (target < lower || g == lastEligible) break;
+                if (target < lower) break;
             }
 
-            int count = VariationsInGroup(profile, chosen, filtering);
-            float fraction = Mathf.Clamp01((target - chosenLower) / profile.GetGroupWeight(chosen));
-            int offset = Mathf.Min(count - 1, (int)(fraction * count));
+            if (chosen < 0) return -1;
 
-            return filtering ? enabledVariants[enabledStart[chosen] + offset] : profile.GetGroupFirst(chosen) + offset;
-        }
+            List<int> candidates = eligible[zone][chosen];
+            float fraction = Mathf.Clamp01((target - chosenLower) / groupWeights[chosen]);
+            int offset = Mathf.Min(candidates.Count - 1, (int)(fraction * candidates.Count));
 
-        private int VariationsInGroup(ScatterProfile profile, int group, bool filtering)
-        {
-            return filtering ? enabledCount[group] : profile.GetGroupLength(group);
+            return candidates[offset];
         }
 
         private bool IsTooClose(float x, float z, float spacingSqr)
