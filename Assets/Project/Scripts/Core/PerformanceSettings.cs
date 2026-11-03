@@ -106,6 +106,29 @@ namespace PROCEDURAL_GAME.Core
         /// <summary>Nível de sombras que vale agora: a escolha do jogador menos o corte da qualidade automática.</summary>
         public static int EffectiveShadowLevel => Mathf.Max(ShadowOff, GetShadowLevel() - AutoShadowReduction);
 
+        // Qualidade do solo: liga o mapa de normal (relevo) das texturas de chão. Desligada (padrão) é o mais leve.
+        private const string GroundQualityKey = "ground.quality";
+        private static int groundQualityCache = -1;
+
+        /// <summary>Qualidade do solo escolhida pelo jogador (é o teto da qualidade automática).</summary>
+        public static bool GetGroundQuality()
+        {
+            if (groundQualityCache < 0) groundQualityCache = PlayerPrefs.GetInt(GroundQualityKey, 0) == 1 ? 1 : 0;
+            return groundQualityCache == 1;
+        }
+
+        public static void SetGroundQuality(bool enabled)
+        {
+            groundQualityCache = enabled ? 1 : 0;
+            PlayerPrefs.SetInt(GroundQualityKey, groundQualityCache);
+        }
+
+        /// <summary>Verdadeiro se a qualidade automática desligou a qualidade do solo (é o primeiro item a reduzir). Não é gravado.</summary>
+        public static bool AutoGroundCut { get; set; }
+
+        /// <summary>Qualidade do solo que vale agora: a escolha do jogador, a menos que a qualidade automática a tenha desligado.</summary>
+        public static bool EffectiveGroundQuality => GetGroundQuality() && !AutoGroundCut;
+
         // Distância de visão: 0 = Perto, 1 = Médio (padrão), 2 = Longe. Define até onde o mundo é carregado, a neblina que
         // cobre tudo nessa distância e o plano de corte da câmera (ver World/ViewDistance e ViewDistanceController).
         public const int ViewNear = 0;
@@ -169,7 +192,7 @@ namespace PROCEDURAL_GAME.Core
 
         public static void SetSavedAutoLevel(string biomeName, int level) => PlayerPrefs.SetInt(AutoLevelKeyPrefix + biomeName, level);
 
-        /// <summary>Apaga as escolhas gerais (FPS alvo, contador, qualidade automática, sombras e distância de visão): voltam a valer os valores da cena.</summary>
+        /// <summary>Apaga as escolhas gerais (FPS alvo, contador, qualidade automática, sombras, distância de visão e qualidade do solo): voltam a valer os valores da cena.</summary>
         public static void ResetGeneral()
         {
             PlayerPrefs.DeleteKey(TargetFpsKey);
@@ -178,8 +201,10 @@ namespace PROCEDURAL_GAME.Core
             PlayerPrefs.DeleteKey(AutoFpsKey);
             PlayerPrefs.DeleteKey(ShadowLevelKey);
             PlayerPrefs.DeleteKey(ViewLevelKey);
+            PlayerPrefs.DeleteKey(GroundQualityKey);
             shadowLevelCache = -1;
             viewLevelCache = -1;
+            groundQualityCache = -1;
         }
 
         /// <summary>Grava no disco. Chamar ao sair da tela de opções ou iniciar o jogo (PlayerPrefs só persiste ao salvar/fechar).</summary>
@@ -194,6 +219,8 @@ namespace PROCEDURAL_GAME.Core
             AutoShadowReduction = 0;
             shadowLevelCache = -1;
             viewLevelCache = -1;
+            groundQualityCache = -1;
+            AutoGroundCut = false;
         }
     }
 }

@@ -42,8 +42,6 @@ namespace PROCEDURAL_GAME.World
         // Deslocamento do ruído de mistura baixa/alta para não repetir o desenho do ruído de agrupamento.
         private const int ForestMixSaltOffset = 7919;
 
-        // Deslocamento do sorteio das zonas (estações) para não repetir os outros sorteios do perfil.
-        private const int ZoneSaltOffset = 104729;
 
         private readonly TerrainNoise terrain;
         private readonly int seed;
@@ -296,40 +294,12 @@ namespace PROCEDURAL_GAME.World
         }
 
         /// <summary>
-        /// Zona do ponto (x, z): um mapa de células irregulares (Voronoi). O mundo é dividido em quadrados de
-        /// <see cref="ScatterProfile.zoneSize"/> metros, cada um com um ponto-semente deslocado ao acaso e uma zona sorteada;
-        /// o ponto pertence à zona da semente mais próxima. Função só de seed + posição: o mesmo lugar é sempre da mesma zona
-        /// e a troca de uma zona para outra é seca (não há árvores de duas zonas intercaladas).
+        /// Zona do ponto (x, z) no mapa de zonas do perfil (<see cref="SeasonZoneMap"/>, o mesmo que o chão usa para misturar texturas).
+        /// A troca de uma zona para outra é seca: não há árvores de duas zonas intercaladas.
         /// </summary>
         private int ZoneAt(ScatterProfile profile, float x, float z, int zoneCount)
         {
-            float size = Mathf.Max(20f, profile.ZoneSize);
-            int cellX = Mathf.FloorToInt(x / size);
-            int cellZ = Mathf.FloorToInt(z / size);
-
-            float bestDistance = float.MaxValue;
-            int bestZone = 0;
-
-            // Sementes ficam entre 15% e 85% da célula: a mais próxima sempre está nas 3x3 células em volta.
-            for (int dz = -1; dz <= 1; dz++)
-            {
-                for (int dx = -1; dx <= 1; dx++)
-                {
-                    int sx = cellX + dx;
-                    int sz = cellZ + dz;
-                    uint hash = math.hash(new int4(seed, sx, sz, profile.ZoneSalt + ZoneSaltOffset));
-
-                    float px = (sx + 0.15f + 0.7f * ((hash & 0xFFFFu) / 65536f)) * size;
-                    float pz = (sz + 0.15f + 0.7f * (((hash >> 16) & 0xFFFFu) / 65536f)) * size;
-                    float distance = (px - x) * (px - x) + (pz - z) * (pz - z);
-                    if (distance >= bestDistance) continue;
-
-                    bestDistance = distance;
-                    bestZone = (int)(math.hash(new int4(sz, sx, seed, profile.ZoneSalt + ZoneSaltOffset + 1)) % (uint)zoneCount);
-                }
-            }
-
-            return bestZone;
+            return SeasonZoneMap.ZoneAt(seed, profile.ZoneSalt, profile.ZoneSize, zoneCount, x, z);
         }
 
         /// <summary>

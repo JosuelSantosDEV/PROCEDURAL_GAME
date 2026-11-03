@@ -249,6 +249,7 @@ namespace PROCEDURAL_GAME.UI
             CreateFpsCounterRow();
             CreateViewDistanceRow();
             CreateShadowRow();
+            CreateGroundQualityRow();
             CreateSectionTitle(PerformanceSettings.GetAutoQuality() ? "Objetos (máximo)" : "Objetos");
 
             categories.Clear();
@@ -305,6 +306,17 @@ namespace PROCEDURAL_GAME.UI
         {
             CreateToggleRow("Contador de FPS", PerformanceSettings.GetShowFpsCounter(PerformanceSettings.DefaultShowFpsCounter),
                 PerformanceSettings.SetShowFpsCounter);
+        }
+
+        // Qualidade do solo: liga ou desliga o relevo (mapa de normal) das texturas de chão. Padrão desligada.
+        private void CreateGroundQualityRow()
+        {
+            CreateToggleRow("Qualidade do solo", PerformanceSettings.GetGroundQuality(), PerformanceSettings.SetGroundQuality);
+
+            Text hint = UiKit.CreateText(performanceContent, "GroundQualityHint",
+                "Ligada: o chão ganha relevo (folhas e terra em alto e baixo), mais bonito e mais pesado. Desligada: textura lisa, mais leve. Só tem efeito nos biomas com mapa de normal no chão.",
+                26, TextAnchor.UpperLeft, UiKit.MutedTextColor);
+            UiKit.SetLayout(hint.gameObject, preferredHeight: 100f);
         }
 
         // Distância de visão: Perto, Médio, Longe. Define quanto do mundo existe, onde a neblina cobre tudo e até onde a câmera

@@ -23,12 +23,29 @@ MonoBehaviour:
   rockSlopeStart: 0.8
   rockSlopeFull: 0.62
   colorVariation: 0.15
+  groundLayers:
+  - zoneId: Autumn
+    albedo: {fileID: 2800000, guid: 64a47eeb36cdb834cbeab040ae185214, type: 3}
+    normal: {fileID: 2800000, guid: 98fdc681e054cef449f4465fad2b0b6d, type: 3}
+  - zoneId: Spring
+    albedo: {fileID: 2800000, guid: 35aa20e6cbee78041851f8674e8e8396, type: 3}
+    normal: {fileID: 2800000, guid: 0062282f05bf85d4596b3b2364c70097, type: 3}
+  - zoneId: Summer
+    albedo: {fileID: 2800000, guid: 7c3e9a1d5b2f4e8a9d6c1b0f3a5e7d24, type: 3}
+    normal: {fileID: 2800000, guid: 1626b9472ad9de74689ca09a767be313, type: 3}
+  groundBlendMeters: 30
+  groundTexture: {fileID: 0}
+  groundTileMeters: 4
+  groundTextureStrength: 1
+  groundVertexInfluence: 0.5
   fogColor: {r: 0.4, g: 0.46, b: 0.44, a: 1}
   fogDensity: 0.035
   ambientColor: {r: 0.165, g: 0.195, b: 0.195, a: 1}
   lightColor: {r: 0.7, g: 0.76, b: 0.8, a: 1}
   lightIntensity: 0.65
   viewRadius: 2
+  shadowDistances: {x: 20, y: 30, z: 40}
   scatter:
   - {fileID: 11400000, guid: 7d7a82924a5858242848e4cac7d21bca, type: 2}
   - {fileID: 11400000, guid: 934ecc3dba9e64e4d91c441243ffbc4f, type: 2}
+  - {fileID: 0}

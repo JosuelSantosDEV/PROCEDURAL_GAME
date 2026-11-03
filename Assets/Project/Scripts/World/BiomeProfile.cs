@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace PROCEDURAL_GAME.World
@@ -50,6 +51,41 @@ namespace PROCEDURAL_GAME.World
         [Tooltip("Variação aleatória de brilho, para o chão não ficar uma cor chapada.")]
         [Range(0f, 0.5f)] public float colorVariation = 0.15f;
 
+        /// <summary>Textura de chão de uma zona do mundo (ex.: uma estação do ano) e o mapa de normal que a acompanha.</summary>
+        [Serializable]
+        public struct GroundLayer
+        {
+            [Tooltip("Id da zona (campo 'Id' de uma entrada de 'Zones' do perfil de árvores, ex.: Autumn, Spring, Summer).")]
+            public string zoneId;
+
+            [Tooltip("Textura de cor que se repete. Sem emenda (tileable). No celular use 512 px (o importador em Assets/Project/Textures/Ground já faz isso).")]
+            public Texture2D albedo;
+
+            [Tooltip("Mapa de normal (relevo) que acompanha a textura. Só é usado com 'Qualidade do solo' ligada no menu Desempenho. Gerado pelo menu PROCEDURAL_GAME > Ground > Generate Normal Maps.")]
+            public Texture2D normal;
+        }
+
+        public const int MaxGroundLayers = 3;
+
+        [Header("Textura do chão (opcional)")]
+        [Tooltip("Uma textura de chão por zona do mundo (até 3). O chão mistura suavemente as texturas na fronteira entre zonas, usando o mesmo mapa de zonas das árvores. Vazio = usa 'Ground Texture' (uma só) ou só a cor de vértice.")]
+        public GroundLayer[] groundLayers;
+
+        [Tooltip("Largura aproximada, em metros, da faixa de transição entre texturas de zonas vizinhas. Maior = mistura mais longa e suave.")]
+        [Min(1f)] public float groundBlendMeters = 30f;
+
+        [Tooltip("Textura única de chão, usada só quando 'Ground Layers' está vazio.")]
+        public Texture2D groundTexture;
+
+        [Tooltip("Lado, em metros, que uma repetição da textura cobre. Menor = detalhe mais fino e repetição mais visível.")]
+        [Min(0.5f)] public float groundTileMeters = 4f;
+
+        [Tooltip("Quanto da textura vale no chão: 0 = só a cor de vértice; 1 = a textura toda (a rocha das encostas nunca recebe textura).")]
+        [Range(0f, 1f)] public float groundTextureStrength = 1f;
+
+        [Tooltip("Quanto a cor de vértice (altura e variação de brilho) ainda modula a textura: 0 = textura pura; 1 = acompanha a cor de vértice por inteiro.")]
+        [Range(0f, 1f)] public float groundVertexInfluence = 0.5f;
+
         [Header("Atmosfera")]
         [Tooltip("Cor da neblina. O céu usa a mesma cor, então o horizonte some sem emenda.")]
         public Color fogColor = new Color(0.55f, 0.57f, 0.60f);
@@ -88,5 +124,18 @@ namespace PROCEDURAL_GAME.World
         [Header("Objetos")]
         [Tooltip("O que nasce nesse bioma (árvores, pedras...). Cada item é um Scatter Profile. Lido uma vez, ao dar Play.")]
         public ScatterProfile[] scatter;
+
+        /// <summary>O perfil de objetos que define as zonas do mundo (o primeiro com grupos e zonas, ex.: as árvores); nulo se não há.</summary>
+        public ScatterProfile FindZoneProfile()
+        {
+            if (scatter == null) return null;
+
+            foreach (ScatterProfile profile in scatter)
+            {
+                if (profile != null && profile.zoneSource == null && profile.UsesZones) return profile;
+            }
+
+            return null;
+        }
     }
 }

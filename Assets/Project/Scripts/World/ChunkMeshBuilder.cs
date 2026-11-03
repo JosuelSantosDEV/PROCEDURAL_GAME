@@ -10,7 +10,6 @@ namespace PROCEDURAL_GAME.World
     public sealed class ChunkMeshBuilder
     {
         // Metros do mundo por repetição da textura. O UV usa a posição no mundo, então uma textura futura continua sem emendas entre chunks.
-        private const float UvMetersPerTile = 4f;
 
         private readonly TerrainNoise terrainNoise;
         private readonly float chunkSize;
@@ -28,15 +27,52 @@ namespace PROCEDURAL_GAME.World
 
         private readonly Vector3[] vertices;
         private readonly Vector3[] normals;
+        // UV0 = pesos das texturas de chão (camadas 0 e 1; o peso da camada 2 é o que sobra até 1). Ver TerrainVertexColor.shader.
         private readonly Vector2[] uvs;
         private readonly Color32[] colors;
         private readonly int[] triangles;
 
-        public ChunkMeshBuilder(TerrainNoise terrainNoise, float chunkSize, int resolution, BiomeProfile biome)
+        // Mistura de texturas por zona: só com 2+ camadas de chão e um perfil de objetos que define as zonas.
+        private readonly bool blendGround;
+        private readonly int seed;
+        private readonly int zoneSalt;
+        private readonly float zoneSize;
+        private readonly float blendMeters;
+        private readonly int[] layerOfZone;
+        private readonly float[] zoneWeights;
+
+        public ChunkMeshBuilder(TerrainNoise terrainNoise, float chunkSize, int resolution, BiomeProfile biome, int seed)
         {
             this.terrainNoise = terrainNoise;
             this.chunkSize = chunkSize;
             this.biome = biome;
+            this.seed = seed;
+
+            ScatterProfile zoneProfile = biome.FindZoneProfile();
+            int layerCount = biome.groundLayers != null ? Mathf.Min(biome.groundLayers.Length, BiomeProfile.MaxGroundLayers) : 0;
+            if (zoneProfile != null && layerCount >= 2)
+            {
+                // Zona -> camada de chão pelo id da zona; zona sem camada usa a primeira.
+                ScatterProfile.SeasonZone[] zones = zoneProfile.ActiveZones;
+                layerOfZone = new int[zones.Length];
+                for (int z = 0; z < zones.Length; z++)
+                {
+                    for (int layer = 0; layer < layerCount; layer++)
+                    {
+                        if (zones[z] != null && biome.groundLayers[layer].zoneId == zones[z].id)
+                        {
+                            layerOfZone[z] = layer;
+                            break;
+                        }
+                    }
+                }
+
+                zoneWeights = new float[zones.Length];
+                zoneSalt = zoneProfile.ZoneSalt;
+                zoneSize = zoneProfile.ZoneSize;
+                blendMeters = biome.groundBlendMeters;
+                blendGround = true;
+            }
             convertToLinear = QualitySettings.activeColorSpace == ColorSpace.Linear;
             // O índice de 16 bits do Mesh aceita até 65535 vértices: (254 + 1)² cabe.
             this.resolution = Mathf.Clamp(resolution, 2, 254);
@@ -86,7 +122,7 @@ namespace PROCEDURAL_GAME.World
                     float worldX = originX + x * step;
                     float worldZ = originZ + z * step;
 
-                    uvs[vertexIndex] = new Vector2(worldX / UvMetersPerTile, worldZ / UvMetersPerTile);
+                    uvs[vertexIndex] = GetGroundWeights(worldX, worldZ);
                     colors[vertexIndex] = GetColor(heights[heightIndex], normals[vertexIndex].y, worldX, worldZ);
                 }
             }
@@ -102,7 +138,7 @@ namespace PROCEDURAL_GAME.World
 
         /// <summary>
         /// Cor do chão num ponto: gradiente por altura (vale → chão → alto), rocha nas encostas íngremes
-        /// e uma leve variação de brilho para não ficar chapado.
+        /// e uma leve variação de brilho para não ficar chapado. O alfa é 1 - rocha (peso da textura de chão no shader).
         /// </summary>
         private Color32 GetColor(float height, float normalY, float worldX, float worldZ)
         {
@@ -117,9 +153,29 @@ namespace PROCEDURAL_GAME.World
             color = Color.Lerp(color, biome.rockColor, rock);
 
             float brightness = 1f + terrainNoise.GetDetail(worldX, worldZ) * biome.colorVariation;
-            color = new Color(color.r * brightness, color.g * brightness, color.b * brightness, 1f);
+
+            // O alfa guarda quanto da textura de chão vale neste ponto: 1 no chão, 0 na rocha (a rocha fica só com a cor).
+            color = new Color(color.r * brightness, color.g * brightness, color.b * brightness, 1f - rock);
 
             return convertToLinear ? color.linear : color;
+        }
+
+        /// <summary>Peso das camadas de chão 0 e 1 no ponto (a camada 2 recebe o que sobra até 1). Sem mistura: tudo na camada 0.</summary>
+        private Vector2 GetGroundWeights(float worldX, float worldZ)
+        {
+            if (!blendGround) return new Vector2(1f, 0f);
+
+            SeasonZoneMap.Weights(seed, zoneSalt, zoneSize, zoneWeights.Length, blendMeters, worldX, worldZ, zoneWeights);
+
+            float layer0 = 0f;
+            float layer1 = 0f;
+            for (int z = 0; z < zoneWeights.Length; z++)
+            {
+                if (layerOfZone[z] == 0) layer0 += zoneWeights[z];
+                else if (layerOfZone[z] == 1) layer1 += zoneWeights[z];
+            }
+
+            return new Vector2(layer0, layer1);
         }
 
         // 0 abaixo de 'from', 1 acima de 'to', suave no meio.

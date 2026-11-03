@@ -61,6 +61,24 @@ namespace PROCEDURAL_GAME.World
 
         // A distância de visão (m) vem do menu Desempenho (Perto/Médio/Longe) e é reduzida pela qualidade automática, sempre
         // por meio do ViewDistanceController. O mundo carrega todo chunk que toca o círculo dessa distância ao redor do Player.
+        private static readonly int[] GroundTexIds =
+        {
+            Shader.PropertyToID("_GroundTex"), Shader.PropertyToID("_GroundTex2"), Shader.PropertyToID("_GroundTex3")
+        };
+
+        private static readonly int[] GroundNrmIds =
+        {
+            Shader.PropertyToID("_GroundNrm"), Shader.PropertyToID("_GroundNrm2"), Shader.PropertyToID("_GroundNrm3")
+        };
+
+        private static readonly int GroundNormalOnId = Shader.PropertyToID("_GroundNormalOn");
+        private static readonly int GroundTilingId = Shader.PropertyToID("_GroundTiling");
+        private static readonly int GroundStrengthId = Shader.PropertyToID("_GroundStrength");
+        private static readonly int VertexInfluenceId = Shader.PropertyToID("_VertexInfluence");
+        private static readonly int LumaRefId = Shader.PropertyToID("_LumaRef");
+
+        private bool hasGroundNormals;
+        private bool groundNormalsApplied;
         private float viewDistance;
         private Vector3 lastRefreshPosition;
         private Vector3 sortPosition;
@@ -158,8 +176,11 @@ namespace PROCEDURAL_GAME.World
             if (randomSeed) seed = Random.Range(int.MinValue, int.MaxValue);
             Debug.Log($"Mundo gerado com a seed {seed}.");
 
+            // Cópia do material: a textura de chão é do bioma, e mexer no asset sujaria o arquivo no Editor.
+            terrainMaterial = CreateTerrainMaterial(terrainMaterial, biome);
+
             terrainNoise = new TerrainNoise(seed, noiseSettings);
-            meshBuilder = new ChunkMeshBuilder(terrainNoise, chunkSize, resolution, biome);
+            meshBuilder = new ChunkMeshBuilder(terrainNoise, chunkSize, resolution, biome, seed);
 
             if (biome.scatter != null && biome.scatter.Length > 0)
             {
@@ -173,6 +194,77 @@ namespace PROCEDURAL_GAME.World
             if (GetComponent<ViewDistanceController>() == null) gameObject.AddComponent<ViewDistanceController>();
         }
 
+        // Passa ao shader as texturas de chão do bioma (uma por camada/zona) e, se houver, os mapas de normal. Sem textura:
+        // uma branca com força 0 (só a cor de vértice). Não há variante de shader: tudo é feito por propriedades do material.
+        private Material CreateTerrainMaterial(Material source, BiomeProfile profile)
+        {
+            Material material = new Material(source);
+
+            Texture2D[] albedos = new Texture2D[BiomeProfile.MaxGroundLayers];
+            Texture2D[] normals = new Texture2D[BiomeProfile.MaxGroundLayers];
+            int layers = 0;
+
+            if (profile.groundLayers != null)
+            {
+                for (int i = 0; i < profile.groundLayers.Length && layers < BiomeProfile.MaxGroundLayers; i++)
+                {
+                    if (profile.groundLayers[i].albedo == null) continue;
+
+                    albedos[layers] = profile.groundLayers[i].albedo;
+                    normals[layers] = profile.groundLayers[i].normal;
+                    layers++;
+                }
+            }
+
+            // Sem camadas: a textura única antiga, se houver.
+            if (layers == 0 && profile.groundTexture != null)
+            {
+                albedos[0] = profile.groundTexture;
+                layers = 1;
+            }
+
+            hasGroundNormals = false;
+            for (int i = 0; i < BiomeProfile.MaxGroundLayers; i++)
+            {
+                // Camadas que faltam repetem a primeira (o peso delas é 0, mas o material precisa de uma textura válida).
+                Texture2D albedo = albedos[i] != null ? albedos[i] : (albedos[0] != null ? albedos[0] : Texture2D.whiteTexture);
+                material.SetTexture(GroundTexIds[i], albedo);
+
+                if (normals[i] != null)
+                {
+                    material.SetTexture(GroundNrmIds[i], normals[i]);
+                    hasGroundNormals = true;
+                }
+            }
+
+            bool hasTexture = layers > 0;
+            material.SetFloat(GroundTilingId, 1f / Mathf.Max(0.5f, profile.groundTileMeters));
+            material.SetFloat(GroundStrengthId, hasTexture ? profile.groundTextureStrength : 0f);
+            material.SetFloat(VertexInfluenceId, profile.groundVertexInfluence);
+
+            // Luminância (linear) da cor de chão do bioma: a cor de vértice acima dela clareia a textura e abaixo escurece.
+            Color grass = profile.grassColor.linear;
+            material.SetFloat(LumaRefId, grass.r * 0.299f + grass.g * 0.587f + grass.b * 0.114f);
+
+            groundNormalsApplied = !PerformanceSettings.EffectiveGroundQuality;
+            ApplyGroundQuality(material);
+
+            Debug.Log(hasTexture
+                ? $"Textura de chão do bioma '{profile.name}': {layers} camada(s), {(hasGroundNormals ? "com" : "sem")} mapa de normal, repete a cada {profile.groundTileMeters:0.##} m, shader '{material.shader.name}'."
+                : $"Bioma '{profile.name}' sem textura de chão: só a cor de vértice.");
+            return material;
+        }
+
+        // Qualidade do solo (menu Desempenho): liga ou desliga a leitura dos mapas de normal. Só tem efeito se o bioma os tem.
+        private void ApplyGroundQuality(Material material)
+        {
+            bool on = hasGroundNormals && PerformanceSettings.EffectiveGroundQuality;
+            if (on == groundNormalsApplied) return;
+
+            groundNormalsApplied = on;
+            material.SetFloat(GroundNormalOnId, on ? 1f : 0f);
+        }
+
         private void Start()
         {
             LoadInitialChunks();
@@ -183,6 +275,8 @@ namespace PROCEDURAL_GAME.World
         {
             // Reavalia o que carregar/descartar a cada RefreshStep metros andados (e não só ao trocar de chunk): o que o
             // Player enxerga é um círculo em metros, e a borda de um chunk pode estar perto demais mesmo no meio dele.
+            ApplyGroundQuality(terrainMaterial);
+
             Vector3 position = target.position;
             float movedX = position.x - lastRefreshPosition.x;
             float movedZ = position.z - lastRefreshPosition.z;

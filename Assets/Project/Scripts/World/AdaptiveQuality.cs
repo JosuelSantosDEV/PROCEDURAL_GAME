@@ -64,7 +64,9 @@ namespace PROCEDURAL_GAME.World
         private int maxLevel;
         private int level;
 
-        // Quantos níveis iniciais só reduzem as sombras (= o nível de sombras escolhido pelo jogador: 0 a 3).
+        // Níveis iniciais que só reduzem a qualidade do solo (1 se o jogador a ligou, senão 0) e, depois, as sombras
+        // (= o nível de sombras escolhido pelo jogador: 0 a 3).
+        private int groundLevels;
         private int shadowLevels;
 
         private float elapsed;
@@ -95,10 +97,11 @@ namespace PROCEDURAL_GAME.World
 
             // Pelo menos o necessário para a distância chegar ao mínimo, e o suficiente para os objetos chegarem ao fator mínimo,
             // mais os níveis que só tiram sombras.
+            groundLevels = PerformanceSettings.GetGroundQuality() ? 1 : 0;
             shadowLevels = PerformanceSettings.GetShadowLevel();
             int objectLevels = Mathf.CeilToInt((1f - minObjectFactor) / factorStep);
             int distanceLevels = Mathf.CeilToInt((baseDistance - minDistance) / distanceStep);
-            maxLevel = shadowLevels + Mathf.Max(objectLevels, distanceLevels);
+            maxLevel = groundLevels + shadowLevels + Mathf.Max(objectLevels, distanceLevels);
 
             level = Mathf.Clamp(PerformanceSettings.GetSavedAutoLevel(world.Biome.name), 0, maxLevel);
             currentRaiseDelay = raiseDelay;
@@ -107,6 +110,7 @@ namespace PROCEDURAL_GAME.World
             // O primeiro nível já vale na criação dos primeiros chunks (Start do WorldGenerator).
             PerformanceSettings.AutoQualityFactor = FactorFor(level);
             PerformanceSettings.AutoShadowReduction = ShadowCutFor(level);
+            PerformanceSettings.AutoGroundCut = GroundCutFor(level);
             if (viewDistance != null) viewDistance.SetAutoCap(DistanceFor(level), immediate: true);
         }
 
@@ -115,7 +119,7 @@ namespace PROCEDURAL_GAME.World
             Measure(Time.unscaledDeltaTime);
 
             float shown = viewDistance != null ? viewDistance.AppliedDistance : baseDistance;
-            FpsCounter.ExtraInfo = $"Auto: nível {level}/{maxLevel}  sombras {PerformanceSettings.EffectiveShadowLevel}  visão {shown:0} m  objetos {PerformanceSettings.AutoQualityFactor * 100f:0}%";
+            FpsCounter.ExtraInfo = $"Auto: nível {level}/{maxLevel}  solo {(PerformanceSettings.EffectiveGroundQuality ? "on" : "off")}  sombras {PerformanceSettings.EffectiveShadowLevel}  visão {shown:0} m  objetos {PerformanceSettings.AutoQualityFactor * 100f:0}%";
         }
 
         private void OnDestroy()
@@ -123,13 +127,17 @@ namespace PROCEDURAL_GAME.World
             // O fator é estático: sem isto o menu ou o próximo jogo herdariam o corte.
             PerformanceSettings.AutoQualityFactor = 1f;
             PerformanceSettings.AutoShadowReduction = 0;
+            PerformanceSettings.AutoGroundCut = false;
             FpsCounter.ExtraInfo = null;
         }
 
-        // Níveis que sobram depois dos que só tiram sombra: os de objetos e raio contam a partir daí.
-        private int WorldLevel(int lvl) => Mathf.Max(0, lvl - shadowLevels);
+        // Níveis que sobram depois dos que só tiram solo e sombra: os de objetos e distância contam a partir daí.
+        private int WorldLevel(int lvl) => Mathf.Max(0, lvl - groundLevels - shadowLevels);
 
-        private int ShadowCutFor(int lvl) => Mathf.Min(lvl, shadowLevels);
+        // O primeiro corte é a qualidade do solo (o mapa de normal), depois as sombras, uma por nível.
+        private bool GroundCutFor(int lvl) => groundLevels > 0 && lvl >= groundLevels;
+
+        private int ShadowCutFor(int lvl) => Mathf.Clamp(lvl - groundLevels, 0, shadowLevels);
 
         private float FactorFor(int lvl) => Mathf.Max(minObjectFactor, 1f - factorStep * WorldLevel(lvl));
 
@@ -209,6 +217,7 @@ namespace PROCEDURAL_GAME.World
 
             // As sombras mudam na hora (o ShadowController confere todo frame); não há o que refazer nos chunks.
             PerformanceSettings.AutoShadowReduction = ShadowCutFor(level);
+            PerformanceSettings.AutoGroundCut = GroundCutFor(level);
 
             if (factorChanged)
             {
