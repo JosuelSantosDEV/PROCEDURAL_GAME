@@ -1,5 +1,88 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!1 &704030236775212112
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2013151088196057529}
+  - component: {fileID: 236026665097216348}
+  - component: {fileID: 4681727011711102078}
+  m_Layer: 0
+  m_Name: LOD2
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2013151088196057529
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 704030236775212112}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1877546292654881828}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!33 &236026665097216348
+MeshFilter:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 704030236775212112}
+  m_Mesh: {fileID: 4300000, guid: 45b553ed494362d408e3f0c3e519add9, type: 2}
+--- !u!23 &4681727011711102078
+MeshRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 704030236775212112}
+  m_Enabled: 1
+  m_CastShadows: 1
+  m_ReceiveShadows: 1
+  m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 2
+  m_LightProbeUsage: 0
+  m_ReflectionProbeUsage: 0
+  m_RayTracingMode: 2
+  m_RayTraceProcedural: 0
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 2100000, guid: f79e5c0e55efc8c4f9d6e4660652828c, type: 2}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 0
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 3
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 0
+  m_AdditionalVertexStreams: {fileID: 0}
 --- !u!1 &2219277124698177461
 GameObject:
   m_ObjectHideFlags: 0
@@ -32,6 +115,7 @@ Transform:
   m_Children:
   - {fileID: 4094124840265087325}
   - {fileID: 5979688359346074771}
+  - {fileID: 2013151088196057529}
   - {fileID: 8739168093080985720}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -43,20 +127,24 @@ LODGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2219277124698177461}
   serializedVersion: 2
-  m_LocalReferencePoint: {x: -1.3211083, y: 4.378439, z: -0.8086252}
-  m_Size: 14.001045
+  m_LocalReferencePoint: {x: -1.2698419, y: 5.4460115, z: -0.5766659}
+  m_Size: 10.9972515
   m_FadeMode: 0
   m_AnimateCrossFading: 0
   m_LastLODIsBillboard: 0
   m_LODs:
-  - screenRelativeHeight: 0.30313155
+  - screenRelativeHeight: 0.23809749
     fadeTransitionWidth: 0
     renderers:
     - renderer: {fileID: 2386012654832292913}
-  - screenRelativeHeight: 0.11022965
+  - screenRelativeHeight: 0.13605571
     fadeTransitionWidth: 0
     renderers:
     - renderer: {fileID: 7758268515160682774}
+  - screenRelativeHeight: 0.0865809
+    fadeTransitionWidth: 0
+    renderers:
+    - renderer: {fileID: 4681727011711102078}
   m_Enabled: 1
 --- !u!1 &4723950291767264996
 GameObject:
@@ -83,7 +171,7 @@ Transform:
   m_GameObject: {fileID: 4723950291767264996}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -2.1229298, y: -0.052614138, z: 1.3742135}
+  m_LocalPosition: {x: -0.3315417, y: -0.052614138, z: 0.22050336}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

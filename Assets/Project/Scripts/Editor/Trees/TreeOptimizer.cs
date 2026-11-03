@@ -15,7 +15,7 @@ namespace PROCEDURAL_GAME.EditorTools
     /// Assets/Project/Trees/&lt;pacote&gt; um prefab NOVO e independente:
     /// - LOD0: todas as malhas da árvore juntas em uma só (um submesh por material), com a mesma geometria e UVs do original.
     ///   Antes eram dezenas de renderers (Curved: 78; coníferas: 450); agora é 1 renderer e, nas árvores, 1 draw call.
-    /// - LOD1: versão simplificada gerada automaticamente: a madeira (grandes componentes de malha) fica igual e os cartões
+    /// - LOD1: versão simplificada gerada automaticamente: a madeira (peças com a textura de casca, mesmo as pequenas) fica igual e os cartões
     ///   de folhas (componentes pequenos) são reduzidos a uma fração, com os que sobram ampliados para manter a cobertura.
     /// - LODGroup por distância (constantes no topo): LOD0 até 40 m, LOD1 até 110 m (arbustos: some a 70 m), depois some.
     /// Prefabs duplicados (mesma malha, materiais e posições) não são gerados. Nenhum original é alterado ou apagado.
@@ -34,15 +34,31 @@ namespace PROCEDURAL_GAME.EditorTools
         // lodBias 2 dobra as distâncias, 0,4 as reduz a 40%. Para mudar depois de gerado, rode o menu 3 de novo.
         private const float ReferenceFov = 60f;
         private const float TreeLod1Distance = 40f;         // daqui para a frente a árvore usa a versão simplificada (LOD1)
+        private const float TreeLod2Distance = 70f;         // daqui para a frente usa a versão mais simples e rústica (LOD2)
         private const float TreeCullDistance = 110f;        // daqui para a frente some (acima do alcance da neblina da Floresta_01)
         private const float GroundCoverCullDistance = 70f;  // arbustos são muitos e pequenos: somem antes
 
-        // ---- Simplificação do LOD1 ----
+        // ---- Simplificação dos LODs ----
+        // LOD1: tira parte das folhas. LOD2 (distância maior, quase sempre sob neblina): tira quase todas as folhas, amplia as que
+        // ficam e também metade dos galhos pequenos; tronco e galhos grandes ficam. Os sorteios são aninhados: o que sobra no LOD2
+        // também existe no LOD1, então a troca de nível não "muda" a árvore.
         private const int SmallComponentTriangles = 40;  // componente com até isto = cartão de folha (pode ser removido)
         private const float FoliageKeepFraction = 0.4f;  // fração dos cartões de folha que fica no LOD1
-        private const float MaxCardScale = 1.8f;         // teto da ampliação dos cartões que ficam
+        private const float MaxCardScale = 1.2f;         // teto da ampliação dos cartões que ficam
         private const int MinTrianglesForLod1 = 400;     // árvore menor que isto não ganha LOD1 (só some a distância)
         private const float MaxLod1Ratio = 0.75f;        // LOD1 só vale se tiver no máximo esta fração dos triângulos do LOD0
+        private const float Lod2FoliageKeep = 0.15f;     // fração dos cartões de folha que fica no LOD2
+        private const float Lod2MaxCardScale = 1.8f;     // teto da ampliação dos cartões no LOD2
+        private const float Lod2SmallWoodKeep = 0.5f;    // fração dos galhos pequenos (peças de casca com até 40 tri) que fica no LOD2
+        private const float MaxLod2Ratio = 0.65f;        // LOD2 só vale se tiver no máximo esta fração dos triângulos do LOD1
+
+        // ---- Madeira x folhas ----
+        // A casca ocupa um bloco fixo dos atlas Autumn/Spring/Summer/Winter (Mobile_FV): x 1088..2046 e y 720..2046 de 2048 px,
+        // ou seja, u >= 0,53 e v <= 0,65 (v com origem embaixo), com uma pequena folga. Peça cujos vértices estão nesse bloco é
+        // madeira (tronco e galhos), mesmo pequena: galhos são muitas peças soltas de poucos triângulos e NÃO podem ser tratadas
+        // como folhas (removidas ou ampliadas), o que entortava os galhos no LOD1.
+        private const float BarkUMin = 0.525f;
+        private const float BarkVMax = 0.655f;
 
         // ---- Centro do tronco (para o colisor) ----
         private const float TrunkSliceFraction = 0.2f;   // a base do tronco = esta fração mais baixa da altura da madeira
@@ -355,7 +371,7 @@ namespace PROCEDURAL_GAME.EditorTools
             int lod1Triangles = 0;
             if (!groundCover && lod0Triangles >= MinTrianglesForLod1)
             {
-                lod1Mesh = BuildThinnedMesh(geometry, outputName + "_LOD1", out lod1Triangles);
+                lod1Mesh = BuildThinnedMesh(geometry, outputName + "_LOD1", FoliageKeepFraction, MaxCardScale, 1f, out lod1Triangles);
                 if (lod1Mesh != null && lod1Triangles > lod0Triangles * MaxLod1Ratio)
                 {
                     Object.DestroyImmediate(lod1Mesh);
@@ -363,8 +379,22 @@ namespace PROCEDURAL_GAME.EditorTools
                 }
             }
 
+            // LOD2: só existe se há LOD1 e se for bem mais leve que ele (senão não compensa um nível a mais).
+            Mesh lod2Mesh = null;
+            int lod2Triangles = 0;
+            if (lod1Mesh != null)
+            {
+                lod2Mesh = BuildThinnedMesh(geometry, outputName + "_LOD2", Lod2FoliageKeep, Lod2MaxCardScale, Lod2SmallWoodKeep, out lod2Triangles);
+                if (lod2Mesh != null && lod2Triangles > lod1Triangles * MaxLod2Ratio)
+                {
+                    Object.DestroyImmediate(lod2Mesh);
+                    lod2Mesh = null;
+                }
+            }
+
             lod0Mesh = SaveMesh(lod0Mesh, $"{folder}/Meshes/{outputName}_LOD0.asset");
             if (lod1Mesh != null) lod1Mesh = SaveMesh(lod1Mesh, $"{folder}/Meshes/{outputName}_LOD1.asset");
+            if (lod2Mesh != null) lod2Mesh = SaveMesh(lod2Mesh, $"{folder}/Meshes/{outputName}_LOD2.asset");
 
             GameObject source = AssetDatabase.LoadAssetAtPath<GameObject>(sourcePath);
             GameObject prefabRoot = new GameObject(outputName);
@@ -375,19 +405,21 @@ namespace PROCEDURAL_GAME.EditorTools
 
                 Renderer lod0Renderer = AddMeshChild(prefabRoot.transform, "LOD0", lod0Mesh, geometry.Materials);
                 Renderer lod1Renderer = lod1Mesh != null ? AddMeshChild(prefabRoot.transform, "LOD1", lod1Mesh, geometry.Materials) : null;
+                Renderer lod2Renderer = lod2Mesh != null ? AddMeshChild(prefabRoot.transform, "LOD2", lod2Mesh, geometry.Materials) : null;
 
                 LODGroup group = prefabRoot.AddComponent<LODGroup>();
                 group.fadeMode = LODFadeMode.None;
                 group.animateCrossFading = false;
 
                 // O tamanho do grupo só é conhecido depois de calcular os limites; as alturas (tela) saem dele e das distâncias.
-                group.SetLODs(BuildLods(lod0Renderer, lod1Renderer, 0.5f, 0.1f));
+                group.SetLODs(BuildLods(lod0Renderer, lod1Renderer, lod2Renderer, 0.5f, 0.25f, 0.1f));
                 group.RecalculateBounds();
 
                 float cullDistance = groundCover ? GroundCoverCullDistance : TreeCullDistance;
                 float cullHeight = HeightAt(group.size, cullDistance);
-                float lod1Height = Mathf.Max(HeightAt(group.size, TreeLod1Distance), cullHeight + 0.01f);
-                group.SetLODs(BuildLods(lod0Renderer, lod1Renderer, lod1Height, cullHeight));
+                float lod2Height = Mathf.Max(HeightAt(group.size, TreeLod2Distance), cullHeight + 0.01f);
+                float lod1Height = Mathf.Max(HeightAt(group.size, TreeLod1Distance), (lod2Renderer != null ? lod2Height : cullHeight) + 0.01f);
+                group.SetLODs(BuildLods(lod0Renderer, lod1Renderer, lod2Renderer, lod1Height, lod2Height, cullHeight));
                 group.RecalculateBounds();
 
                 // Marcador do centro da base do tronco: o jogo centra o colisor nele (o pivô de alguns modelos não é o tronco).
@@ -410,17 +442,22 @@ namespace PROCEDURAL_GAME.EditorTools
             if (geometry.MirroredPieces > 0) notes.Add($"{geometry.MirroredPieces} peça(s) espelhada(s) corrigida(s)");
             if (geometry.MissingTangents) notes.Add("tangentes recalculadas");
             if (lod1Mesh == null) notes.Add(groundCover ? "sem LOD1 (vegetação rasteira)" : "sem LOD1");
+            else if (lod2Mesh == null) notes.Add("sem LOD2");
             if (!groundCover) notes.Add($"centro do tronco x {trunkCenter.x:0.00} z {trunkCenter.z:0.00}");
 
             return $"{sourcePath} -> {output} | {pieces.Count} peças -> 1 renderer, {geometry.Materials.Count} material(is) | " +
-                   $"{lod0Triangles} / {(lod1Mesh != null ? lod1Triangles.ToString() : "-")} tri | {vertices} vért | {string.Join("; ", notes)}";
+                   $"{lod0Triangles} / {(lod1Mesh != null ? lod1Triangles.ToString() : "-")} / {(lod2Mesh != null ? lod2Triangles.ToString() : "-")} tri | {vertices} vért | {string.Join("; ", notes)}";
         }
 
-        /// <summary>Sem LOD1: um nível só (some abaixo de <paramref name="cullHeight"/>). Com LOD1: LOD0 até <paramref name="lod1Height"/>, LOD1 até <paramref name="cullHeight"/>.</summary>
-        private static LOD[] BuildLods(Renderer lod0, Renderer lod1, float lod1Height, float cullHeight)
+        /// <summary>
+        /// Sem LOD1: um nível só (some abaixo de <paramref name="cullHeight"/>). Com LOD1: LOD0 até <paramref name="lod1Height"/>, LOD1 até
+        /// <paramref name="cullHeight"/>. Com LOD2: LOD1 só até <paramref name="lod2Height"/> e o LOD2 vai até <paramref name="cullHeight"/>.
+        /// </summary>
+        private static LOD[] BuildLods(Renderer lod0, Renderer lod1, Renderer lod2, float lod1Height, float lod2Height, float cullHeight)
         {
             if (lod1 == null) return new[] { new LOD(cullHeight, new[] { lod0 }) };
-            return new[] { new LOD(lod1Height, new[] { lod0 }), new LOD(cullHeight, new[] { lod1 }) };
+            if (lod2 == null) return new[] { new LOD(lod1Height, new[] { lod0 }), new LOD(cullHeight, new[] { lod1 }) };
+            return new[] { new LOD(lod1Height, new[] { lod0 }), new LOD(lod2Height, new[] { lod1 }), new LOD(cullHeight, new[] { lod2 }) };
         }
 
         /// <summary>Altura relativa na tela (0 a 1) de um objeto de <paramref name="size"/> metros visto a <paramref name="distance"/> metros.</summary>
@@ -570,7 +607,7 @@ namespace PROCEDURAL_GAME.EditorTools
         /// componentes grandes (tronco, galhos) ficam intactos; os pequenos (cartões) entram numa fração fixa, sorteada
         /// de forma determinística, e os que ficam são ampliados em torno do próprio centro para a copa não ficar rala.
         /// </summary>
-        private static Mesh BuildThinnedMesh(Geometry geometry, string name, out int triangleCount)
+        private static Mesh BuildThinnedMesh(Geometry geometry, string name, float foliageKeep, float maxCardScale, float smallWoodKeep, out int triangleCount)
         {
             int vertexCount = geometry.Vertices.Count;
             int[] parent = new int[vertexCount];
@@ -588,6 +625,7 @@ namespace PROCEDURAL_GAME.EditorTools
             int[] componentTriangles = new int[vertexCount];
             Vector3[] centerSum = new Vector3[vertexCount];
             int[] componentVertices = new int[vertexCount];
+            int[] barkVertices = new int[vertexCount];
 
             foreach (List<int> triangles in geometry.Triangles)
             {
@@ -599,9 +637,10 @@ namespace PROCEDURAL_GAME.EditorTools
                 int root = Find(parent, v);
                 centerSum[root] += geometry.Vertices[v];
                 componentVertices[root]++;
+                if (IsBarkUv(geometry.Uvs[v])) barkVertices[root]++;
             }
 
-            float scale = Mathf.Min(1f / Mathf.Sqrt(FoliageKeepFraction), MaxCardScale);
+            float scale = Mathf.Min(1f / Mathf.Sqrt(foliageKeep), maxCardScale);
 
             Mesh mesh = new Mesh { name = name };
             List<Vector3> vertices = new List<Vector3>();
@@ -620,8 +659,13 @@ namespace PROCEDURAL_GAME.EditorTools
                 for (int t = 0; t < triangles.Count; t += 3)
                 {
                     int root = Find(parent, triangles[t]);
-                    bool foliage = componentTriangles[root] <= SmallComponentTriangles;
-                    if (foliage && Hash01(root) >= FoliageKeepFraction) continue;
+                    // Madeira (casca) fica intacta, qualquer que seja o tamanho da peça; só cartões de folha são afinados.
+                    bool wood = barkVertices[root] * 2 >= componentVertices[root];
+                    bool foliage = !wood && componentTriangles[root] <= SmallComponentTriangles;
+                    if (foliage && Hash01(root) >= foliageKeep) continue;
+
+                    // Galhos pequenos só saem nos LODs mais distantes (smallWoodKeep < 1); o tronco e os galhos grandes ficam sempre.
+                    if (wood && smallWoodKeep < 1f && componentTriangles[root] <= SmallComponentTriangles && Hash01(root + 100003) >= smallWoodKeep) continue;
 
                     Vector3 center = centerSum[root] / Mathf.Max(1, componentVertices[root]);
                     for (int corner = 0; corner < 3; corner++)
@@ -693,13 +737,23 @@ namespace PROCEDURAL_GAME.EditorTools
                 for (int t = 0; t < triangles.Count; t += 3) componentTriangles[Find(parent, triangles[t])]++;
             }
 
-            // Sem madeira reconhecível (árvore feita só de peças pequenas), usa todos os vértices.
+            int[] componentVertices = new int[vertexCount];
+            int[] barkVertices = new int[vertexCount];
+            for (int v = 0; v < vertexCount; v++)
+            {
+                int root = Find(parent, v);
+                componentVertices[root]++;
+                if (IsBarkUv(geometry.Uvs[v])) barkVertices[root]++;
+            }
+
+            // Madeira = peça grande ou peça com a textura de casca. Sem madeira reconhecível, usa todos os vértices.
             bool[] isWood = new bool[vertexCount];
             float minY = float.MaxValue;
             float maxY = float.MinValue;
             for (int v = 0; v < vertexCount; v++)
             {
-                isWood[v] = componentTriangles[Find(parent, v)] > SmallComponentTriangles;
+                int root = Find(parent, v);
+                isWood[v] = componentTriangles[root] > SmallComponentTriangles || barkVertices[root] * 2 >= componentVertices[root];
                 if (!isWood[v]) continue;
 
                 minY = Mathf.Min(minY, geometry.Vertices[v].y);
@@ -734,6 +788,8 @@ namespace PROCEDURAL_GAME.EditorTools
 
             return new Vector3((minX + maxX) * 0.5f, minY, (minZ + maxZ) * 0.5f);
         }
+
+        private static bool IsBarkUv(Vector2 uv) => uv.x >= BarkUMin && uv.y <= BarkVMax;
 
         private static int Find(int[] parent, int index)
         {
