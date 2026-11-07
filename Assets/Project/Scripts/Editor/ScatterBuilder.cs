@@ -499,6 +499,92 @@ namespace PROCEDURAL_GAME.EditorTools
             return typeFromName;
         }
 
+        // ---- Lagos (Floresta_01): palmeiras e faixas em volta da água ----
+
+        private const string PalmsFolder = "Assets/Project/Trees/Palms";
+
+        // Palmeiras de um tronco aparecem mais (entram duas vezes na lista sorteada); duplas e trio, uma vez.
+        private static readonly string[] PalmPrefabNames =
+        {
+            "PalmTreeSingleStraight", "PalmTreeSingleBended", "PalmTreeSingleStraight", "PalmTreeSingleBended",
+            "PalmTreeDualStraight", "PalmTreeDualBended", "PalmTreeTrio"
+        };
+
+        /// <summary>
+        /// Cria o perfil de palmeiras, define o papel de cada perfil nas faixas em volta dos lagos (árvores normais, arbustos,
+        /// palmeiras) e acrescenta as palmeiras à lista de objetos do bioma, se ainda não estiverem. Não muda o que já está certo.
+        /// </summary>
+        public static void EnsureLakeScatter(BiomeProfile biome)
+        {
+            ScatterProfile palms = GetOrCreate("Palmeiras", profile =>
+            {
+                profile.prefabs = FindPalmPrefabs();
+                profile.salt = 41;
+                profile.attemptsPerChunk = 4f;      // grade de ~16 m: uma palmeira a cada ~256 m², só na faixa em volta do lago
+                profile.spacingByDensity = true;
+                profile.spacingJitter = 0.25f;
+                profile.minSpacing = 8f;
+                profile.clustering = 0f;
+                profile.maxSlope = 25f;
+                profile.minScale = 0.85f;
+                profile.maxScale = 1.2f;
+                profile.alignToSurface = 0f;
+                profile.sinkDepth = 0.15f;
+                profile.collision = ScatterCollision.Trunk;
+                profile.trunkRadius = 0.4f;
+            });
+
+            EnsureCategory(palms, "palms", "Palmeiras");
+            EnsureShadowLevel(palms, PerformanceSettings.ShadowLow);
+
+            SetLakeBand(palms, LakeBand.Palms);
+            SetLakeBand(AssetDatabase.LoadAssetAtPath<ScatterProfile>(LeafyTreesAssetPath), LakeBand.NormalTrees);
+            SetLakeBand(AssetDatabase.LoadAssetAtPath<ScatterProfile>(ShrubsAssetPath), LakeBand.Shrubs);
+
+            AppendToList(biome, palms);
+        }
+
+        private static GameObject[] FindPalmPrefabs()
+        {
+            System.Collections.Generic.List<GameObject> found = new System.Collections.Generic.List<GameObject>();
+            foreach (string name in PalmPrefabNames)
+            {
+                GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{PalmsFolder}/{name}.prefab");
+                if (prefab != null) found.Add(prefab);
+            }
+
+            if (found.Count == 0) Debug.LogWarning($"Nenhuma palmeira em '{PalmsFolder}'. Rode PROCEDURAL_GAME > Trees > 6 - Build Palms e depois este menu de novo.");
+            return found.ToArray();
+        }
+
+        private static void SetLakeBand(ScatterProfile profile, LakeBand band)
+        {
+            if (profile == null || profile.lakeBand == band) return;
+
+            profile.lakeBand = band;
+            EditorUtility.SetDirty(profile);
+            AssetDatabase.SaveAssets();
+        }
+
+        private static void AppendToList(BiomeProfile biome, ScatterProfile profile)
+        {
+            if (biome == null || profile == null) return;
+
+            SerializedObject serialized = new SerializedObject(biome);
+            SerializedProperty list = serialized.FindProperty("scatter");
+
+            for (int i = 0; i < list.arraySize; i++)
+            {
+                if (list.GetArrayElementAtIndex(i).objectReferenceValue == profile) return;
+            }
+
+            list.arraySize++;
+            list.GetArrayElementAtIndex(list.arraySize - 1).objectReferenceValue = profile;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(biome);
+            AssetDatabase.SaveAssets();
+        }
+
         private static void ConfigureRocks(ScatterProfile profile, int attempts, int salt)
         {
             // Sem as versões com musgo por enquanto: o dobro de materiais para o mesmo formato.

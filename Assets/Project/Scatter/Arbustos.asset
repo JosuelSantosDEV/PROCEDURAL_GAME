@@ -163,6 +163,7 @@ MonoBehaviour:
   maxSlope: 40
   minHeight: 0
   maxHeight: 1
+  lakeBand: 2
   minScale: 0.8
   maxScale: 1.5
   alignToSurface: 0

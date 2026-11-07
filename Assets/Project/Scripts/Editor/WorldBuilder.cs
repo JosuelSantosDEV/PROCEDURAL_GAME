@@ -40,6 +40,9 @@ namespace PROCEDURAL_GAME.EditorTools
             BiomeProfile forest02 = GetOrCreateBiome("Floresta_02", ConfigureForest02);
             ScatterBuilder.EnsureDefaults(meadow, forest01, forest02);
 
+            // Lagos da Floresta_01: água, areia e palmeiras (só preenche o que está vazio).
+            LakeBuilder.EnsureLakes(forest01);
+
             // Perfil de pós-processamento do nível Ultra (em Resources: o build mantém as variantes de shader dos efeitos).
             UltraPostProcessBuilder.EnsureAsset();
 

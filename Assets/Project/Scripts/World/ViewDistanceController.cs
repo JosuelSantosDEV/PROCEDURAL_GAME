@@ -26,6 +26,9 @@ namespace PROCEDURAL_GAME.World
         private float applied;
         private float autoCap = float.MaxValue;
         private bool fogInitialized;
+        private float normalFog;
+        private float underwaterFactor;
+        private float underwaterDensity;
 
         /// <summary>Distância (m) que o mundo está carregando agora.</summary>
         public float AppliedDistance => applied;
@@ -43,6 +46,17 @@ namespace PROCEDURAL_GAME.World
 
             applied = Wanted;
             world.SetViewDistance(applied);
+        }
+
+        /// <summary>
+        /// Debaixo d'água (chamado pelo <see cref="UnderwaterController"/>): a neblina fecha até <paramref name="density"/> conforme <paramref name="factor"/>.
+        /// </summary>
+        /// <param name="factor">0 = fora d'água, 1 = totalmente debaixo.</param>
+        /// <param name="density">Densidade da neblina debaixo d'água.</param>
+        public void SetUnderwater(float factor, float density)
+        {
+            underwaterFactor = factor;
+            underwaterDensity = density;
         }
 
         private float Wanted => Mathf.Min(PerformanceSettings.GetViewDistance(), autoCap);
@@ -67,9 +81,13 @@ namespace PROCEDURAL_GAME.World
             }
 
             float fogTarget = ViewDistance.FogDensityFor(Mathf.Min(applied, wanted));
-            float fog = fogInitialized ? Mathf.MoveTowards(RenderSettings.fogDensity, fogTarget, fogChangePerSecond * dt) : fogTarget;
+            float fog = fogInitialized ? Mathf.MoveTowards(normalFog, fogTarget, fogChangePerSecond * dt) : fogTarget;
+            normalFog = fog;
             fogInitialized = true;
-            RenderSettings.fogDensity = fog;
+
+            // Debaixo d'água a neblina fecha de uma vez (só a densidade mostrada; a normal continua seguindo a distância de visão).
+            float shown = underwaterFactor > 0f ? Mathf.Lerp(fog, Mathf.Max(fog, underwaterDensity), underwaterFactor) : fog;
+            RenderSettings.fogDensity = shown;
 
             // Distância menor: só descarrega quando a neblina já cobre a nova distância.
             if (wanted < applied && fog >= fogTarget * 0.98f)
@@ -78,7 +96,7 @@ namespace PROCEDURAL_GAME.World
                 world.SetViewDistance(applied);
             }
 
-            ApplyFarClip(fog);
+            ApplyFarClip(shown);
         }
 
         // Plano de corte = onde a neblina atual cobre tudo (ou o que o mundo carrega, se menor) + folga.

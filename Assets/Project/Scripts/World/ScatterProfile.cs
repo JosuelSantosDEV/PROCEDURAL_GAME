@@ -11,6 +11,15 @@ namespace PROCEDURAL_GAME.World
         [Tooltip("Caixa ao redor do objeto (pedras).")] Box
     }
 
+    /// <summary>Papel do objeto nas faixas em volta dos lagos (ver <see cref="LakeSettings"/>). Só vale em biomas com lagos.</summary>
+    public enum LakeBand
+    {
+        [Tooltip("Só não nasce dentro da água (pedras, por exemplo).")] Ignore,
+        [Tooltip("Árvores normais: não nascem perto do lago (areia nua e faixa das palmeiras); voltam aos poucos mais longe.")] NormalTrees,
+        [Tooltip("Arbustos: não nascem na areia nua; nascem na faixa das palmeiras e na floresta.")] Shrubs,
+        [Tooltip("Palmeiras: só nascem na faixa das palmeiras (depois da areia nua).")] Palms
+    }
+
     /// <summary>
     /// Regras para espalhar um tipo de objeto (árvores, pedras, depois recursos e inimigos) pelos chunks.
     /// As posições são sorteadas só com seed + coordenada do chunk: voltar a um lugar traz os mesmos objetos.
@@ -153,6 +162,9 @@ namespace PROCEDURAL_GAME.World
 
         [Tooltip("Altura máxima, de 0 a 1.")]
         [Range(0f, 1f)] public float maxHeight = 1f;
+
+        [Tooltip("Papel nas faixas em volta dos lagos (só em biomas com lagos): árvores normais, arbustos ou palmeiras.")]
+        public LakeBand lakeBand = LakeBand.Ignore;
 
         [Header("Forma")]
         [Min(0.01f)] public float minScale = 0.8f;

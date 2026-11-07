@@ -121,6 +121,15 @@ namespace PROCEDURAL_GAME.EditorTools
             return null;
         }
 
+        private static bool LinkLake(Texture2D albedo, ref Texture2D target, Dictionary<string, Texture2D> normals, ref int linked)
+        {
+            if (albedo == null || !normals.TryGetValue(albedo.name, out Texture2D normal) || target == normal) return false;
+
+            target = normal;
+            linked++;
+            return true;
+        }
+
         // Preenche "normal" nas camadas de chão cuja textura de cor tem o mesmo nome e reimporta os biomas.
         private static int LinkToBiomes(Dictionary<string, Texture2D> normals)
         {
@@ -148,6 +157,14 @@ namespace PROCEDURAL_GAME.EditorTools
                         changed = true;
                         linked++;
                     }
+                }
+
+                // Areia dos lagos: mesma ligação, por nome da textura de cor.
+                if (biome.lakes != null)
+                {
+                    LakeSettings lakes = biome.lakes;
+                    changed |= LinkLake(lakes.sandTexture, ref lakes.sandNormal, normals, ref linked);
+                    changed |= LinkLake(lakes.bedTexture, ref lakes.bedNormal, normals, ref linked);
                 }
 
                 if (changed) EditorUtility.SetDirty(biome);

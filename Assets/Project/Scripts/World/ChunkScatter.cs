@@ -47,6 +47,7 @@ namespace PROCEDURAL_GAME.World
         private readonly int seed;
         private readonly float chunkSize;
         private readonly float spawnClearSqr;
+        private readonly LakeMap lakes;
 
         // Reaproveitadas a cada chamada para não gerar lixo de memória.
         private readonly List<Vector2> accepted = new List<Vector2>();
@@ -67,6 +68,7 @@ namespace PROCEDURAL_GAME.World
             this.seed = seed;
             this.chunkSize = chunkSize;
             spawnClearSqr = spawnClearRadius * spawnClearRadius;
+            lakes = terrain.Lakes;
         }
 
         public void Generate(Vector2Int coord, ScatterProfile profile, List<ScatterPlacement> results)
@@ -122,6 +124,9 @@ namespace PROCEDURAL_GAME.World
                 Vector3 normal = new Vector3(-slopeX, 2f * SlopeStep, -slopeZ).normalized;
                 float slope = Vector3.Angle(Vector3.up, normal);
                 if (slope > profile.maxSlope) return;
+
+                // Lagos: nada dentro da água; em volta, cada tipo de objeto tem a sua faixa (ver LakeMap.Allows).
+                if (lakes != null && !lakes.Allows(profile.lakeBand, x, z, lakes.ShoreDistance(x, z))) return;
 
                 if (profile.clustering > 0f)
                 {

@@ -45,7 +45,32 @@ MonoBehaviour:
   lightIntensity: 0.65
   viewRadius: 2
   shadowDistances: {x: 20, y: 30, z: 40}
+  lakes:
+    enabled: 1
+    cellSize: 288
+    chance: 0.6
+    radiusRange: {x: 28, y: 44}
+    maxDepth: 4.5
+    levelOffset: 0.3
+    clearRadius: 90
+    shoreReach: 45
+    bankSlope: 0.12
+    bareSandMeters: 15
+    palmMeters: 30
+    mixMeters: 30
+    patchMeters: 32
+    patchGapMeters: 9
+    underwaterColor: {r: 0.04, g: 0.15, b: 0.17, a: 1}
+    underwaterVisibility: 22
+    waterMaterial: {fileID: 2100000, guid: 978999b1c8870ef4a88b9927ef947015, type: 2}
+    shallowColor: {r: 0.2, g: 0.27, b: 0.24, a: 1}
+    deepColor: {r: 0.02, g: 0.05, b: 0.06, a: 1}
+    sandTexture: {fileID: 2800000, guid: 8036df819e3d18f4d9331933151395fd, type: 3}
+    sandNormal: {fileID: 2800000, guid: 441306576ccb2cf4dbfd115261a01164, type: 3}
+    bedTexture: {fileID: 2800000, guid: 8983f756ed2dcf142b0739e30d638b3c, type: 3}
+    bedNormal: {fileID: 2800000, guid: 7ba67a37bc71c924fa6c4e567ff1397e, type: 3}
   scatter:
   - {fileID: 11400000, guid: 7d7a82924a5858242848e4cac7d21bca, type: 2}
   - {fileID: 11400000, guid: 934ecc3dba9e64e4d91c441243ffbc4f, type: 2}
   - {fileID: 0}
+  - {fileID: 11400000, guid: 4be4e1f418af5c240a67b5facdf40a4c, type: 2}

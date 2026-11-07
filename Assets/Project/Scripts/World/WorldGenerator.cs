@@ -76,6 +76,10 @@ namespace PROCEDURAL_GAME.World
         private static readonly int GroundStrengthId = Shader.PropertyToID("_GroundStrength");
         private static readonly int VertexInfluenceId = Shader.PropertyToID("_VertexInfluence");
         private static readonly int LumaRefId = Shader.PropertyToID("_LumaRef");
+        private static readonly int SandTexId = Shader.PropertyToID("_SandTex");
+        private static readonly int BedTexId = Shader.PropertyToID("_BedTex");
+        private static readonly int SandNrmId = Shader.PropertyToID("_SandNrm");
+        private static readonly int BedNrmId = Shader.PropertyToID("_BedNrm");
 
         private bool hasGroundNormals;
         private bool groundNormalsApplied;
@@ -90,6 +94,8 @@ namespace PROCEDURAL_GAME.World
         private TerrainNoise terrainNoise;
         private ChunkMeshBuilder meshBuilder;
         private ScatterSpawner scatter;
+        private WaterMeshBuilder waterBuilder;
+        private Material waterMaterial;
         private bool hasCenter;
 
         /// <summary>Seed em uso (útil para reproduzir um mundo que você gostou).</summary>
@@ -138,6 +144,9 @@ namespace PROCEDURAL_GAME.World
 
         public float GetHeight(float x, float z) => terrainNoise.GetHeight(x, z);
 
+        /// <summary>Lagos do mundo; nulo se o bioma não tem.</summary>
+        public LakeMap Lakes => terrainNoise != null ? terrainNoise.Lakes : null;
+
         private void Awake()
         {
             if (target == null)
@@ -179,8 +188,24 @@ namespace PROCEDURAL_GAME.World
             // Cópia do material: a textura de chão é do bioma, e mexer no asset sujaria o arquivo no Editor.
             terrainMaterial = CreateTerrainMaterial(terrainMaterial, biome);
 
-            terrainNoise = new TerrainNoise(seed, noiseSettings);
+            terrainNoise = new TerrainNoise(seed, noiseSettings, biome.lakes);
             meshBuilder = new ChunkMeshBuilder(terrainNoise, chunkSize, resolution, biome, seed);
+
+            if (terrainNoise.Lakes != null)
+            {
+                if (biome.lakes.waterMaterial == null)
+                {
+                    Debug.LogWarning($"Bioma '{biome.name}' com lagos ligados, mas sem 'Water Material': o lago aparece sem água. Rode PROCEDURAL_GAME > Create Procedural World.", this);
+                }
+                else
+                {
+                    waterMaterial = biome.lakes.waterMaterial;
+                    waterBuilder = new WaterMeshBuilder(terrainNoise, chunkSize);
+                }
+
+                // Efeito de estar debaixo d'água (neblina e cor azuladas).
+                if (GetComponent<UnderwaterController>() == null) gameObject.AddComponent<UnderwaterController>();
+            }
 
             if (biome.scatter != null && biome.scatter.Length > 0)
             {
@@ -236,6 +261,29 @@ namespace PROCEDURAL_GAME.World
                 if (normals[i] != null)
                 {
                     material.SetTexture(GroundNrmIds[i], normals[i]);
+                    hasGroundNormals = true;
+                }
+            }
+
+            // Areia dos lagos (só com lagos; o peso vem do UV1 da malha, que sem lagos fica zerado).
+            LakeSettings lakeSettings = profile.lakes;
+            Texture2D sand = lakeSettings != null && lakeSettings.enabled && lakeSettings.sandTexture != null ? lakeSettings.sandTexture : Texture2D.whiteTexture;
+            Texture2D bed = lakeSettings != null && lakeSettings.enabled && lakeSettings.bedTexture != null ? lakeSettings.bedTexture : sand;
+            material.SetTexture(SandTexId, sand);
+            material.SetTexture(BedTexId, bed);
+
+            // Mapas de normal da areia (Qualidade do solo). Sem eles, o padrão do material ("bump") vale: relevo plano.
+            if (lakeSettings != null && lakeSettings.enabled)
+            {
+                if (lakeSettings.sandNormal != null)
+                {
+                    material.SetTexture(SandNrmId, lakeSettings.sandNormal);
+                    hasGroundNormals = true;
+                }
+
+                if (lakeSettings.bedNormal != null)
+                {
+                    material.SetTexture(BedNrmId, lakeSettings.bedNormal);
                     hasGroundNormals = true;
                 }
             }
@@ -454,8 +502,8 @@ namespace PROCEDURAL_GAME.World
         {
             if (activeChunks.ContainsKey(coord)) return;
 
-            TerrainChunk chunk = pool.Count > 0 ? pool.Pop() : new TerrainChunk(transform, terrainMaterial);
-            chunk.Show(coord, new Vector3(coord.x * chunkSize, 0f, coord.y * chunkSize), meshBuilder, scatter);
+            TerrainChunk chunk = pool.Count > 0 ? pool.Pop() : new TerrainChunk(transform, terrainMaterial, waterMaterial);
+            chunk.Show(coord, new Vector3(coord.x * chunkSize, 0f, coord.y * chunkSize), meshBuilder, scatter, waterBuilder);
             chunk.SetScatterCollisions(IsNearForCollision(coord, WorldToChunk(target.position)));
             activeChunks.Add(coord, chunk);
         }

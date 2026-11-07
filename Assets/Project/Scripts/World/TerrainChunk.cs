@@ -13,6 +13,10 @@ namespace PROCEDURAL_GAME.World
         private readonly GameObject gameObject;
         private readonly Mesh mesh;
         private readonly MeshCollider meshCollider;
+
+        // Água do lago (só em biomas com lagos): um filho com a própria malha, ligado só nos chunks que têm lago.
+        private readonly GameObject waterObject;
+        private readonly Mesh waterMesh;
         private readonly List<ScatterInstance> scatterInstances = new List<ScatterInstance>();
 
         private ScatterSpawner scatter;
@@ -20,7 +24,7 @@ namespace PROCEDURAL_GAME.World
 
         public Vector2Int Coord { get; private set; }
 
-        public TerrainChunk(Transform parent, Material material)
+        public TerrainChunk(Transform parent, Material material, Material waterMaterial = null)
         {
             gameObject = new GameObject("Chunk", typeof(MeshFilter), typeof(MeshRenderer), typeof(MeshCollider));
             gameObject.transform.SetParent(parent, false);
@@ -38,11 +42,31 @@ namespace PROCEDURAL_GAME.World
             meshRenderer.receiveShadows = true;
             meshCollider = gameObject.GetComponent<MeshCollider>();
 
+            if (waterMaterial != null)
+            {
+                waterObject = new GameObject("Water", typeof(MeshFilter), typeof(MeshRenderer));
+                waterObject.transform.SetParent(gameObject.transform, false);
+
+                waterMesh = new Mesh { name = "WaterMesh" };
+                waterMesh.MarkDynamic();
+                waterObject.GetComponent<MeshFilter>().sharedMesh = waterMesh;
+
+                // A água só aparece: sem sombras, sem sondas de luz/reflexo e sem colisor (o Player entra nela).
+                MeshRenderer waterRenderer = waterObject.GetComponent<MeshRenderer>();
+                waterRenderer.sharedMaterial = waterMaterial;
+                waterRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                waterRenderer.receiveShadows = false;
+                waterRenderer.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
+                waterRenderer.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
+                waterObject.SetActive(false);
+            }
+
             gameObject.SetActive(false);
         }
 
         /// <param name="scatterSpawner">Cria árvores, pedras etc. sobre o chunk. Pode ser nulo (chunk só com terreno).</param>
-        public void Show(Vector2Int coord, Vector3 worldPosition, ChunkMeshBuilder builder, ScatterSpawner scatterSpawner = null)
+        /// <param name="waterBuilder">Monta a água dos lagos do chunk. Pode ser nulo (bioma sem lagos).</param>
+        public void Show(Vector2Int coord, Vector3 worldPosition, ChunkMeshBuilder builder, ScatterSpawner scatterSpawner = null, WaterMeshBuilder waterBuilder = null)
         {
             Coord = coord;
             gameObject.transform.position = worldPosition;
@@ -52,6 +76,9 @@ namespace PROCEDURAL_GAME.World
 
             builder.Build(mesh, coord);
             gameObject.SetActive(true);
+
+            // O chunk reciclado pode ter tido água antes: o filho é ligado ou desligado conforme o chunk novo.
+            if (waterObject != null) waterObject.SetActive(waterBuilder != null && waterBuilder.Build(waterMesh, coord));
 
             // Atribuir de novo (null e depois a malha) força o Unity a recalcular a colisão com a malha nova.
             meshCollider.sharedMesh = null;
@@ -95,6 +122,7 @@ namespace PROCEDURAL_GAME.World
         public void Dispose()
         {
             if (mesh != null) Object.Destroy(mesh);
+            if (waterMesh != null) Object.Destroy(waterMesh);
         }
     }
 }

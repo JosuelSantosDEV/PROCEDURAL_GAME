@@ -45,8 +45,10 @@ namespace PROCEDURAL_GAME.World
         private readonly float2 detailOffset;
         private readonly float2 clusterOffset;
         private readonly float maxAmplitude;
+        private readonly LakeMap lakes;
 
-        public TerrainNoise(int seed, NoiseSettings settings)
+        /// <param name="lakeSettings">Lagos do bioma (nulo ou desligado = relevo sem lagos).</param>
+        public TerrainNoise(int seed, NoiseSettings settings, LakeSettings lakeSettings = null)
         {
             this.settings = settings;
 
@@ -67,7 +69,12 @@ namespace PROCEDURAL_GAME.World
 
             // Sorteado por último: acrescentar sorteios aqui não muda o relevo nem o detalhe de seeds já conhecidas.
             clusterOffset = new float2(random.Next(-OffsetRange, OffsetRange), random.Next(-OffsetRange, OffsetRange));
+
+            if (lakeSettings != null && lakeSettings.enabled) lakes = new LakeMap(seed, lakeSettings, GetBaseHeight);
         }
+
+        /// <summary>Lagos do mundo; nulo se o bioma não tem.</summary>
+        public LakeMap Lakes => lakes;
 
         /// <summary>Altura máxima possível do relevo, em metros.</summary>
         public float MaxHeight => settings.heightScale;
@@ -87,7 +94,15 @@ namespace PROCEDURAL_GAME.World
             return noise.snoise(new float2(x, z) * frequency + clusterOffset + new float2(salt * 53.7f, salt * 91.3f));
         }
 
+        /// <summary>Altura do terreno em qualquer ponto, já com os lagos escavados (se houver).</summary>
         public float GetHeight(float x, float z)
+        {
+            float natural = GetBaseHeight(x, z);
+            return lakes != null ? lakes.Carve(x, z, natural) : natural;
+        }
+
+        /// <summary>Altura natural do relevo, sem lagos.</summary>
+        public float GetBaseHeight(float x, float z)
         {
             float amplitude = 1f;
             float frequency = 1f / settings.scale;

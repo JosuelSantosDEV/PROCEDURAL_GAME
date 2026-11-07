@@ -121,6 +121,10 @@ namespace PROCEDURAL_GAME.World
             }
         }
 
+        [Header("Lagos")]
+        [Tooltip("Lagos escavados no relevo, com água e faixas de areia, palmeiras e floresta em volta (ver LakeSettings).")]
+        public LakeSettings lakes = new LakeSettings();
+
         [Header("Objetos")]
         [Tooltip("O que nasce nesse bioma (árvores, pedras...). Cada item é um Scatter Profile. Lido uma vez, ao dar Play.")]
         public ScatterProfile[] scatter;

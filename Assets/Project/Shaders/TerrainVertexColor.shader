@@ -10,6 +10,10 @@
 // Qualidade do solo (_GroundNormalOn = 1, opção do menu Desempenho): também lê o mapa de normal de cada textura e usa o
 // relevo na iluminação. Desligada, nenhum mapa de normal é lido (o ramo é uniforme, então não custa nada).
 //
+// Areia dos lagos: duas texturas a mais (_SandTex = areia da margem, _BedTex = areia lisa do fundo), com pesos no UV1 da malha
+// (x = areia, y = quanto dela é a do fundo; calculado em LakeMap). Onde a areia pesa 1, as texturas das zonas nem são lidas; na
+// transição de volta para a floresta, as duas se misturam. Sem lagos o UV1 é zero e nada disso é lido.
+//
 // Sem texturas, o WorldGenerator põe uma textura branca e _GroundStrength = 0: o resultado é só a cor de vértice.
 //
 // Sombras: este shader só RECEBE as sombras da luz principal (árvores e pedras projetam no terreno); o terreno em si
@@ -26,6 +30,10 @@ Shader "PROCEDURAL_GAME/TerrainVertexColor"
         [NoScaleOffset] _GroundNrm ("Normal do chão (zona 1)", 2D) = "bump" {}
         [NoScaleOffset] _GroundNrm2 ("Normal do chão (zona 2)", 2D) = "bump" {}
         [NoScaleOffset] _GroundNrm3 ("Normal do chão (zona 3)", 2D) = "bump" {}
+        [NoScaleOffset] _SandTex ("Areia da margem dos lagos", 2D) = "white" {}
+        [NoScaleOffset] _BedTex ("Areia do fundo dos lagos", 2D) = "white" {}
+        [NoScaleOffset] _SandNrm ("Normal da areia da margem", 2D) = "bump" {}
+        [NoScaleOffset] _BedNrm ("Normal da areia do fundo", 2D) = "bump" {}
         _GroundTiling ("Repetições por metro", Float) = 0.25
         _GroundStrength ("Força da textura", Range(0, 1)) = 0
         _GroundNormalOn ("Qualidade do solo (0 ou 1)", Float) = 0
@@ -65,6 +73,10 @@ Shader "PROCEDURAL_GAME/TerrainVertexColor"
             TEXTURE2D(_GroundNrm);
             TEXTURE2D(_GroundNrm2);
             TEXTURE2D(_GroundNrm3);
+            TEXTURE2D(_SandTex);
+            TEXTURE2D(_BedTex);
+            TEXTURE2D(_SandNrm);
+            TEXTURE2D(_BedNrm);
 
             // Mesmo bloco nos dois passes: o SRP Batcher exige.
             CBUFFER_START(UnityPerMaterial)
@@ -83,6 +95,7 @@ Shader "PROCEDURAL_GAME/TerrainVertexColor"
                 float4 positionOS : POSITION;
                 float3 normalOS   : NORMAL;
                 float2 weights    : TEXCOORD0; // pesos das texturas 1 e 2 (a 3 recebe o resto)
+                float2 sand       : TEXCOORD1; // x = peso da areia do lago, y = quanto dela é a do fundo
                 half4  color      : COLOR;
             };
 
@@ -94,6 +107,7 @@ Shader "PROCEDURAL_GAME/TerrainVertexColor"
                 half   fogFactor  : TEXCOORD2;
                 float3 positionWS : TEXCOORD3;
                 half2  weights    : TEXCOORD4;
+                half2  sand       : TEXCOORD5;
             };
 
             Varyings Vert(Attributes input)
@@ -106,6 +120,7 @@ Shader "PROCEDURAL_GAME/TerrainVertexColor"
                 output.normalWS = TransformObjectToWorldNormal(input.normalOS);
                 output.color = input.color;
                 output.weights = input.weights;
+                output.sand = input.sand;
                 output.fogFactor = ComputeFogFactor(positions.positionCS.z);
 
                 return output;
@@ -121,14 +136,28 @@ Shader "PROCEDURAL_GAME/TerrainVertexColor"
                 float2 ddxUv = ddx(groundUv);
                 float2 ddyUv = ddy(groundUv);
 
-                half w0 = input.weights.x;
-                half w1 = input.weights.y;
-                half w2 = saturate(1.0h - w0 - w1);
+                // A areia do lago toma o lugar das texturas das zonas: onde ela pesa 1, as zonas nem são lidas.
+                half sandW = input.sand.x;
+                half bedW = input.sand.y;
+                half zoneW = saturate(1.0h - sandW);
+
+                half w0 = input.weights.x * zoneW;
+                half w1 = input.weights.y * zoneW;
+                half w2 = saturate(1.0h - input.weights.x - input.weights.y) * zoneW;
 
                 half3 ground = 0;
                 if (w0 > MinWeight) ground += w0 * SAMPLE_TEXTURE2D_GRAD(_GroundTex, sampler_GroundTex, groundUv, ddxUv, ddyUv).rgb;
                 if (w1 > MinWeight) ground += w1 * SAMPLE_TEXTURE2D_GRAD(_GroundTex2, sampler_GroundTex, groundUv, ddxUv, ddyUv).rgb;
                 if (w2 > MinWeight) ground += w2 * SAMPLE_TEXTURE2D_GRAD(_GroundTex3, sampler_GroundTex, groundUv, ddxUv, ddyUv).rgb;
+
+                half beachW = 1.0h - bedW;
+                if (sandW > MinWeight)
+                {
+                    half3 sand = 0;
+                    if (beachW > MinWeight) sand += beachW * SAMPLE_TEXTURE2D_GRAD(_SandTex, sampler_GroundTex, groundUv, ddxUv, ddyUv).rgb;
+                    if (bedW > MinWeight) sand += bedW * SAMPLE_TEXTURE2D_GRAD(_BedTex, sampler_GroundTex, groundUv, ddxUv, ddyUv).rgb;
+                    ground += sandW * sand;
+                }
 
                 // O brilho da cor de vértice (altura, variação) modula a textura, para o relevo não ficar chapado.
                 half luma = dot(input.color.rgb, half3(0.299h, 0.587h, 0.114h));
@@ -143,6 +172,15 @@ Shader "PROCEDURAL_GAME/TerrainVertexColor"
                     if (w0 > MinWeight) tangentNormal += w0 * UnpackNormal(SAMPLE_TEXTURE2D_GRAD(_GroundNrm, sampler_GroundTex, groundUv, ddxUv, ddyUv));
                     if (w1 > MinWeight) tangentNormal += w1 * UnpackNormal(SAMPLE_TEXTURE2D_GRAD(_GroundNrm2, sampler_GroundTex, groundUv, ddxUv, ddyUv));
                     if (w2 > MinWeight) tangentNormal += w2 * UnpackNormal(SAMPLE_TEXTURE2D_GRAD(_GroundNrm3, sampler_GroundTex, groundUv, ddxUv, ddyUv));
+                    if (sandW > MinWeight)
+                    {
+                        // Areia: o mesmo relevo da "Qualidade do solo". Sem mapa de normal, o padrão ("bump") dá relevo plano.
+                        half3 sandNormal = 0;
+                        if (beachW > MinWeight) sandNormal += beachW * UnpackNormal(SAMPLE_TEXTURE2D_GRAD(_SandNrm, sampler_GroundTex, groundUv, ddxUv, ddyUv));
+                        if (bedW > MinWeight) sandNormal += bedW * UnpackNormal(SAMPLE_TEXTURE2D_GRAD(_BedNrm, sampler_GroundTex, groundUv, ddxUv, ddyUv));
+                        tangentNormal += sandW * sandNormal;
+                    }
+
                     tangentNormal = normalize(tangentNormal);
 
                     half3 tangent = normalize(half3(1.0h, 0.0h, 0.0h) - normalWS * normalWS.x);

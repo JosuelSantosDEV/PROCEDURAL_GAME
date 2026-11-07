@@ -32,6 +32,10 @@ namespace PROCEDURAL_GAME.World
         private readonly Color32[] colors;
         private readonly int[] triangles;
 
+        // UV1 = areia do lago: x = peso da areia da margem, y = quanto dela é a do fundo. Só com lagos (ver LakeMap.GroundWeights).
+        private readonly LakeMap lakes;
+        private readonly Vector2[] sandUvs;
+
         // Mistura de texturas por zona: só com 2+ camadas de chão e um perfil de objetos que define as zonas.
         private readonly bool blendGround;
         private readonly int seed;
@@ -86,6 +90,8 @@ namespace PROCEDURAL_GAME.World
             normals = new Vector3[vertices.Length];
             uvs = new Vector2[vertices.Length];
             colors = new Color32[vertices.Length];
+            lakes = terrainNoise.Lakes;
+            sandUvs = new Vector2[vertices.Length];
             triangles = BuildTriangles(this.resolution);
         }
 
@@ -123,6 +129,7 @@ namespace PROCEDURAL_GAME.World
                     float worldZ = originZ + z * step;
 
                     uvs[vertexIndex] = GetGroundWeights(worldX, worldZ);
+                    if (lakes != null) sandUvs[vertexIndex] = lakes.GroundWeights(worldX, worldZ, heights[heightIndex]);
                     colors[vertexIndex] = GetColor(heights[heightIndex], normals[vertexIndex].y, worldX, worldZ);
                 }
             }
@@ -131,6 +138,7 @@ namespace PROCEDURAL_GAME.World
             mesh.vertices = vertices;
             mesh.normals = normals;
             mesh.uv = uvs;
+            if (lakes != null) mesh.uv2 = sandUvs;
             mesh.colors32 = colors;
             mesh.SetTriangles(triangles, 0, false);
             mesh.RecalculateBounds();
