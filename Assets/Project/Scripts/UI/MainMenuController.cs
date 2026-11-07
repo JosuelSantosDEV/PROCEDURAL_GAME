@@ -247,6 +247,7 @@ namespace PROCEDURAL_GAME.UI
             else CreateTargetFpsRow();
 
             CreateFpsCounterRow();
+            CreateRenderQualityRow();
             CreateViewDistanceRow();
             CreateShadowRow();
             CreateGroundQualityRow();
@@ -306,6 +307,50 @@ namespace PROCEDURAL_GAME.UI
         {
             CreateToggleRow("Contador de FPS", PerformanceSettings.GetShowFpsCounter(PerformanceSettings.DefaultShowFpsCounter),
                 PerformanceSettings.SetShowFpsCounter);
+        }
+
+        // Resolução de renderização: Baixo 50%, Performance 60%, Médio 75% (padrão), Alto 85%, Ultra 100% (nativa, com pós-processamento).
+        // Com a qualidade automática, é o teto (ela desce de degrau em degrau quando o FPS cai). O HDR fica sempre desligado.
+        private void CreateRenderQualityRow()
+        {
+            int level = PerformanceSettings.GetRenderQuality();
+            string label = PerformanceSettings.GetAutoQuality() ? "Resolução (máx.)" : "Resolução";
+
+            Text hint = null;
+            CreateSliderRow(label, PerformanceSettings.RenderUltra, level, FormatRenderQuality, newLevel =>
+            {
+                PerformanceSettings.SetRenderQuality(newLevel);
+                if (hint != null) hint.text = RenderQualityHint(newLevel);
+            });
+
+            hint = UiKit.CreateText(performanceContent, "RenderQualityHint", RenderQualityHint(level), 26, TextAnchor.UpperLeft, UiKit.MutedTextColor);
+            UiKit.SetLayout(hint.gameObject, preferredHeight: 100f);
+        }
+
+        private static string FormatRenderQuality(int level)
+        {
+            switch (level)
+            {
+                case PerformanceSettings.RenderLow: return "Baixo";
+                case PerformanceSettings.RenderPerformance: return "Performance";
+                case PerformanceSettings.RenderHigh: return "Alto";
+                case PerformanceSettings.RenderUltra: return "Ultra";
+                default: return "Médio";
+            }
+        }
+
+        private static string RenderQualityHint(int level)
+        {
+            int percent = Mathf.RoundToInt(PerformanceSettings.GetRenderScale(level) * 100f);
+
+            switch (level)
+            {
+                case PerformanceSettings.RenderLow: return $"Baixo ({percent}% da resolução): imagem mais suave e o jogo bem mais leve. A melhor escolha para celulares fracos.";
+                case PerformanceSettings.RenderPerformance: return $"Performance ({percent}% da resolução): leve, um pouco mais nítido que o Baixo.";
+                case PerformanceSettings.RenderHigh: return $"Alto ({percent}% da resolução): imagem nítida, mais pesado que o Médio.";
+                case PerformanceSettings.RenderUltra: return $"Ultra ({percent}%, resolução nativa da tela) com pós-processamento: mais contraste, brilho nas luzes, vinheta e tom cinematográfico. Só para celulares fortes.";
+                default: return $"Médio ({percent}% da resolução): equilíbrio entre nitidez e desempenho. É o padrão.";
+            }
         }
 
         // Qualidade do solo: liga ou desliga o relevo (mapa de normal) das texturas de chão. Padrão desligada.

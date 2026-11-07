@@ -16,6 +16,13 @@ namespace PROCEDURAL_GAME.World
         /// </summary>
         public const string TrunkCenterName = "TrunkCenter";
 
+        /// <summary>
+        /// Nome do filho com um MeshCollider de malha simplificada do tronco (só a metade de baixo), que o gerador de árvores
+        /// (Trees > 3 - Build ALL) deixa nos tipos de base larga (5Arms, Jungle1). Quando existe, substitui a cápsula central:
+        /// é o único colisor original que a instância mantém.
+        /// </summary>
+        public const string TrunkColliderName = "TrunkCollider";
+
         private readonly GameObject gameObject;
         private readonly Transform transform;
         private readonly Vector3 baseScale;
@@ -32,6 +39,9 @@ namespace PROCEDURAL_GAME.World
 
         // Centro do tronco no espaço local da raiz (só x e z importam). Zero = o pivô do prefab já é o tronco.
         private Vector3 trunkCenter;
+
+        // Colisor de malha do tronco vindo do prefab (null = usa a cápsula).
+        private MeshCollider trunkMeshCollider;
 
         public ScatterProfile Profile { get; }
         public GameObject Prefab { get; }
@@ -61,10 +71,20 @@ namespace PROCEDURAL_GAME.World
                 Object.DestroyImmediate(trunkMarker.gameObject);
             }
 
+            // Colisor de malha do tronco: fica no lugar da cápsula (só em perfis com colisão de tronco; nos demais é descartado).
+            MeshCollider trunkMesh = null;
+            Transform trunkColliderChild = transform.Find(TrunkColliderName);
+            if (trunkColliderChild != null) trunkMesh = trunkColliderChild.GetComponent<MeshCollider>();
+            if (trunkMesh != null && profile.collision != ScatterCollision.Trunk) trunkMesh = null;
+            trunkMeshCollider = trunkMesh;
+
             // DestroyImmediate de propósito: Destroy só age no fim do frame, e a instância é ativada no mesmo frame
             // em que nasce, então o colisor convexo original seria calculado antes de sumir. É seguro aqui porque
             // mexemos numa cópia inativa nossa, nunca no asset do prefab.
-            foreach (Collider original in gameObject.GetComponentsInChildren<Collider>(true)) Object.DestroyImmediate(original);
+            foreach (Collider original in gameObject.GetComponentsInChildren<Collider>(true))
+            {
+                if (original != trunkMeshCollider) Object.DestroyImmediate(original);
+            }
 
             renderers = gameObject.GetComponentsInChildren<Renderer>(true);
             canCastShadow = FindShadowCasters(renderers, lodGroup);
@@ -142,6 +162,7 @@ namespace PROCEDURAL_GAME.World
         private Collider AddCollider(ScatterProfile profile)
         {
             if (profile.collision == ScatterCollision.None) return null;
+            if (trunkMeshCollider != null) return trunkMeshCollider;
 
             Bounds bounds = GetLocalBounds();
             if (bounds.size == Vector3.zero) return null;

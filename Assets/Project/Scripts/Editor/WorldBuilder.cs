@@ -40,6 +40,9 @@ namespace PROCEDURAL_GAME.EditorTools
             BiomeProfile forest02 = GetOrCreateBiome("Floresta_02", ConfigureForest02);
             ScatterBuilder.EnsureDefaults(meadow, forest01, forest02);
 
+            // Perfil de pós-processamento do nível Ultra (em Resources: o build mantém as variantes de shader dos efeitos).
+            UltraPostProcessBuilder.EnsureAsset();
+
             SetMenuTexts(meadow, "Campo", "Campo aberto, com pouca neblina. Só rochas.");
             SetMenuTexts(forest01, "Floresta 01", "Mata fechada e viva: árvores variadas e arbustos.");
             SetMenuTexts(forest02, "Floresta 02", "Floresta sombria de árvores secas e rochas.");

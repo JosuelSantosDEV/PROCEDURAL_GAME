@@ -161,8 +161,8 @@ namespace PROCEDURAL_GAME.EditorTools
         // 'young1' não está na lista: os prefabs eram idênticos aos de 'Tree' (mesma malha e materiais) e foram apagados.
         private static readonly (string id, float elevation, int preference, float collider)[] TreeTypes =
         {
-            ("5Arms", -1.0f, 3, 4.5f), ("Curved", -0.7f, 2, 1.0f), ("FullTree", -0.3f, 2, 1.0f),
-            ("SkinnyBunches", -0.5f, 2, 1.0f), ("SkinnyTall", -0.3f, 1, 1.0f), ("TallThin", -1.0f, 2, 1.2f),
+            ("5Arms", -1.0f, 3, 4.5f), ("Curved", -0.7f, 2, 2.2f), ("FullTree", -0.3f, 2, 1.0f),
+            ("SkinnyBunches", -0.5f, 2, 1.0f), ("SkinnyTall", -0.3f, 1, 1.0f), ("TallThin", -1.0f, 2, 2.8f),
             ("Tree_short", -0.5f, 2, 1.0f), ("Tree_single", -1.5f, 3, 5.0f), ("Tree", -0.1f, 1, 0.1f),
             ("young2", -0.1f, 2, 0.1f), ("Jungle1", -10.0f, 3, 7.0f), (SpiralTreeId, -1.0f, 2, 1.0f)
         };

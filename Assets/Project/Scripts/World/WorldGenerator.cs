@@ -190,6 +190,9 @@ namespace PROCEDURAL_GAME.World
             // Aplica o nível de sombras do menu (luz, URP e objetos). Nasce junto: não exige refazer a cena.
             if (GetComponent<ShadowController>() == null) gameObject.AddComponent<ShadowController>();
 
+            // Resolução interna do jogo (Baixa/Média/Alta) e HDR desligado.
+            if (GetComponent<RenderQualityController>() == null) gameObject.AddComponent<RenderQualityController>();
+
             // Neblina e plano de corte da câmera acompanham a distância de visão.
             if (GetComponent<ViewDistanceController>() == null) gameObject.AddComponent<ViewDistanceController>();
         }

@@ -64,6 +64,12 @@ namespace PROCEDURAL_GAME.EditorTools
         private const float TrunkSliceFraction = 0.2f;   // a base do tronco = esta fração mais baixa da altura da madeira
         private const float MinTrunkSlice = 0.3f;        // fatia mínima, em metros do prefab (árvores muito baixas)
 
+        // ---- Colisor de malha do tronco (tipos de base larga, onde a cápsula não basta) ----
+        private static readonly string[] TrunkMeshTypes = { "5Arms", "Jungle1", "Tree_single" };
+        private const float TrunkMeshHeightFraction = 0.5f;  // só a madeira da metade de baixo da altura
+        private const float TrunkMeshStartCell = 0.03f;      // célula inicial da simplificação = esta fração da altura mantida
+        private const int TrunkMeshMaxTriangles = 120;       // a célula cresce até a malha ter no máximo isto
+
         // Nomes usados no modo de teste (poucas árvores para conferir o resultado antes de converter tudo).
         private static readonly HashSet<string> TestNames = new HashSet<string>
         {
@@ -399,6 +405,7 @@ namespace PROCEDURAL_GAME.EditorTools
             GameObject source = AssetDatabase.LoadAssetAtPath<GameObject>(sourcePath);
             GameObject prefabRoot = new GameObject(outputName);
             Vector3 trunkCenter = Vector3.zero;
+            int trunkMeshTriangles = 0;
             try
             {
                 prefabRoot.transform.localScale = source.transform.localScale;
@@ -429,6 +436,22 @@ namespace PROCEDURAL_GAME.EditorTools
                     GameObject marker = new GameObject(PROCEDURAL_GAME.World.ScatterInstance.TrunkCenterName);
                     marker.transform.SetParent(prefabRoot.transform, false);
                     marker.transform.localPosition = trunkCenter;
+
+                    // Colisor de malha do tronco (5Arms, Jungle1, Tree_single): madeira da metade de baixo, simplificada. O jogo o usa no lugar da cápsula.
+                    if (WantsTrunkMesh(outputName))
+                    {
+                        Mesh collisionMesh = BuildTrunkCollisionMesh(geometry);
+                        if (collisionMesh != null)
+                        {
+                            collisionMesh = SaveColliderMesh(collisionMesh, $"{folder}/Meshes/{outputName}_Collider.asset");
+                            GameObject colliderObject = new GameObject(PROCEDURAL_GAME.World.ScatterInstance.TrunkColliderName);
+                            colliderObject.transform.SetParent(prefabRoot.transform, false);
+                            MeshCollider meshCollider = colliderObject.AddComponent<MeshCollider>();
+                            meshCollider.sharedMesh = collisionMesh;
+                            meshCollider.convex = false;
+                            trunkMeshTriangles = collisionMesh.triangles.Length / 3;
+                        }
+                    }
                 }
 
                 PrefabUtility.SaveAsPrefabAsset(prefabRoot, output);
@@ -444,6 +467,7 @@ namespace PROCEDURAL_GAME.EditorTools
             if (lod1Mesh == null) notes.Add(groundCover ? "sem LOD1 (vegetação rasteira)" : "sem LOD1");
             else if (lod2Mesh == null) notes.Add("sem LOD2");
             if (!groundCover) notes.Add($"centro do tronco x {trunkCenter.x:0.00} z {trunkCenter.z:0.00}");
+            if (trunkMeshTriangles > 0) notes.Add($"colisor de malha do tronco: {trunkMeshTriangles} tri");
 
             return $"{sourcePath} -> {output} | {pieces.Count} peças -> 1 renderer, {geometry.Materials.Count} material(is) | " +
                    $"{lod0Triangles} / {(lod1Mesh != null ? lod1Triangles.ToString() : "-")} / {(lod2Mesh != null ? lod2Triangles.ToString() : "-")} tri | {vertices} vért | {string.Join("; ", notes)}";
@@ -719,6 +743,32 @@ namespace PROCEDURAL_GAME.EditorTools
         private static Vector3 FindTrunkCenter(Geometry geometry)
         {
             int vertexCount = geometry.Vertices.Count;
+            if (vertexCount == 0) return Vector3.zero;
+
+            ClassifyWood(geometry, out bool[] isWood, out float minY, out float maxY);
+
+            float sliceTop = minY + Mathf.Max((maxY - minY) * TrunkSliceFraction, MinTrunkSlice);
+            float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+
+            for (int v = 0; v < vertexCount; v++)
+            {
+                Vector3 position = geometry.Vertices[v];
+                if (!isWood[v] || position.y > sliceTop) continue;
+
+                minX = Mathf.Min(minX, position.x);
+                maxX = Mathf.Max(maxX, position.x);
+                minZ = Mathf.Min(minZ, position.z);
+                maxZ = Mathf.Max(maxZ, position.z);
+            }
+
+            return new Vector3((minX + maxX) * 0.5f, minY, (minZ + maxZ) * 0.5f);
+        }
+
+        // Madeira = peça grande ou peça com a textura de casca (os cartões de folha, pequenos e sem casca, ficam de fora).
+        // Sem madeira reconhecível, todos os vértices valem. minY/maxY = faixa de altura da madeira.
+        private static void ClassifyWood(Geometry geometry, out bool[] isWood, out float minY, out float maxY)
+        {
+            int vertexCount = geometry.Vertices.Count;
             int[] parent = new int[vertexCount];
             for (int i = 0; i < vertexCount; i++) parent[i] = i;
 
@@ -746,10 +796,9 @@ namespace PROCEDURAL_GAME.EditorTools
                 if (IsBarkUv(geometry.Uvs[v])) barkVertices[root]++;
             }
 
-            // Madeira = peça grande ou peça com a textura de casca. Sem madeira reconhecível, usa todos os vértices.
-            bool[] isWood = new bool[vertexCount];
-            float minY = float.MaxValue;
-            float maxY = float.MinValue;
+            isWood = new bool[vertexCount];
+            minY = float.MaxValue;
+            maxY = float.MinValue;
             for (int v = 0; v < vertexCount; v++)
             {
                 int root = Find(parent, v);
@@ -770,23 +819,139 @@ namespace PROCEDURAL_GAME.EditorTools
                 }
             }
 
-            if (vertexCount == 0) return Vector3.zero;
+        }
 
-            float sliceTop = minY + Mathf.Max((maxY - minY) * TrunkSliceFraction, MinTrunkSlice);
-            float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
-
-            for (int v = 0; v < vertexCount; v++)
+        private static bool WantsTrunkMesh(string prefabName)
+        {
+            foreach (string type in TrunkMeshTypes)
             {
-                Vector3 position = geometry.Vertices[v];
-                if (!isWood[v] || position.y > sliceTop) continue;
-
-                minX = Mathf.Min(minX, position.x);
-                maxX = Mathf.Max(maxX, position.x);
-                minZ = Mathf.Min(minZ, position.z);
-                maxZ = Mathf.Max(maxZ, position.z);
+                if (prefabName.Contains(type)) return true;
             }
 
-            return new Vector3((minX + maxX) * 0.5f, minY, (minZ + maxZ) * 0.5f);
+            return false;
+        }
+
+        /// <summary>
+        /// Malha de colisão do tronco: só os triângulos de madeira da metade de baixo da árvore (sem folhas nem a copa), simplificados
+        /// por agrupamento de vértices numa grade: vértices na mesma célula viram um (a média), triângulos que colapsam ou se
+        /// repetem somem. A célula começa pequena e cresce até a malha ter no máximo <see cref="TrunkMeshMaxTriangles"/>.
+        /// Fica no espaço do prefab. Devolve null se não houver madeira.
+        /// </summary>
+        private static Mesh BuildTrunkCollisionMesh(Geometry geometry)
+        {
+            if (geometry.Vertices.Count == 0) return null;
+
+            ClassifyWood(geometry, out bool[] isWood, out float minY, out float maxY);
+            float limit = minY + (maxY - minY) * TrunkMeshHeightFraction;
+
+            // Um triângulo que cruza o limite entra inteiro.
+            List<int> kept = new List<int>();
+            foreach (List<int> triangles in geometry.Triangles)
+            {
+                for (int t = 0; t < triangles.Count; t += 3)
+                {
+                    int a = triangles[t], b = triangles[t + 1], c = triangles[t + 2];
+                    if (!isWood[a] || !isWood[b] || !isWood[c]) continue;
+
+                    float lowest = Mathf.Min(geometry.Vertices[a].y, Mathf.Min(geometry.Vertices[b].y, geometry.Vertices[c].y));
+                    if (lowest > limit) continue;
+
+                    kept.Add(a);
+                    kept.Add(b);
+                    kept.Add(c);
+                }
+            }
+
+            if (kept.Count == 0) return null;
+
+            float cell = Mathf.Max(0.02f, (limit - minY) * TrunkMeshStartCell);
+            List<Vector3> vertices = null;
+            List<int> indices = null;
+
+            for (int attempt = 0; attempt < 30; attempt++)
+            {
+                ClusterTriangles(geometry.Vertices, kept, cell, out vertices, out indices);
+                if (indices.Count / 3 <= TrunkMeshMaxTriangles) break;
+                cell *= 1.25f;
+            }
+
+            if (indices.Count == 0) return null;
+
+            Mesh mesh = new Mesh { name = "TrunkCollider" };
+            mesh.SetVertices(vertices);
+            mesh.SetTriangles(indices, 0);
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private static void ClusterTriangles(List<Vector3> source, List<int> triangles, float cell, out List<Vector3> vertices, out List<int> indices)
+        {
+            Dictionary<Vector3Int, int> clusterOf = new Dictionary<Vector3Int, int>();
+            int[] remap = new int[source.Count];
+            for (int i = 0; i < remap.Length; i++) remap[i] = -1;
+
+            List<Vector3> sums = new List<Vector3>();
+            List<int> counts = new List<int>();
+
+            foreach (int index in triangles)
+            {
+                if (remap[index] >= 0) continue;
+
+                Vector3 position = source[index];
+                Vector3Int key = new Vector3Int(Mathf.FloorToInt(position.x / cell), Mathf.FloorToInt(position.y / cell), Mathf.FloorToInt(position.z / cell));
+                if (!clusterOf.TryGetValue(key, out int cluster))
+                {
+                    cluster = sums.Count;
+                    clusterOf[key] = cluster;
+                    sums.Add(Vector3.zero);
+                    counts.Add(0);
+                }
+
+                sums[cluster] += position;
+                counts[cluster]++;
+                remap[index] = cluster;
+            }
+
+            vertices = new List<Vector3>(sums.Count);
+            for (int i = 0; i < sums.Count; i++) vertices.Add(sums[i] / counts[i]);
+
+            indices = new List<int>();
+            HashSet<Vector3Int> seen = new HashSet<Vector3Int>();
+
+            for (int t = 0; t < triangles.Count; t += 3)
+            {
+                int a = remap[triangles[t]], b = remap[triangles[t + 1]], c = remap[triangles[t + 2]];
+                if (a == b || b == c || a == c) continue;
+
+                // Mesmo triângulo vindo de peças diferentes: um só.
+                int low = Mathf.Min(a, Mathf.Min(b, c));
+                int high = Mathf.Max(a, Mathf.Max(b, c));
+                int mid = a + b + c - low - high;
+                if (!seen.Add(new Vector3Int(low, mid, high))) continue;
+
+                indices.Add(a);
+                indices.Add(b);
+                indices.Add(c);
+            }
+        }
+
+        // Sem a regra de "ilegível" do SaveMesh: a malha de colisão é minúscula e o MeshCollider se dá melhor com ela legível.
+        private static Mesh SaveColliderMesh(Mesh mesh, string path)
+        {
+            Mesh existing = AssetDatabase.LoadAssetAtPath<Mesh>(path);
+            if (existing != null)
+            {
+                EditorUtility.CopySerialized(mesh, existing);
+                Object.DestroyImmediate(mesh);
+                mesh = existing;
+                EditorUtility.SetDirty(mesh);
+            }
+            else
+            {
+                AssetDatabase.CreateAsset(mesh, path);
+            }
+
+            return mesh;
         }
 
         private static bool IsBarkUv(Vector2 uv) => uv.x >= BarkUMin && uv.y <= BarkVMax;

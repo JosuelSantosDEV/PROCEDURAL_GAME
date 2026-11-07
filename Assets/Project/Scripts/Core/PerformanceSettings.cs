@@ -106,6 +106,47 @@ namespace PROCEDURAL_GAME.Core
         /// <summary>Nível de sombras que vale agora: a escolha do jogador menos o corte da qualidade automática.</summary>
         public static int EffectiveShadowLevel => Mathf.Max(ShadowOff, GetShadowLevel() - AutoShadowReduction);
 
+        // Qualidade de renderização = resolução interna do jogo: 0 Baixo (50%), 1 Performance (60%), 2 Médio (75%, padrão),
+        // 3 Alto (85%), 4 Ultra (100%, nativa + pós-processamento). O HDR fica sempre desligado. Aplicado por
+        // World/RenderQualityController no asset do URP e na câmera.
+        public const int RenderLow = 0;
+        public const int RenderPerformance = 1;
+        public const int RenderMedium = 2;
+        public const int RenderHigh = 3;
+        public const int RenderUltra = 4;
+        public const int DefaultRenderQuality = RenderMedium;
+
+        private static readonly float[] RenderScales = { 0.5f, 0.6f, 0.75f, 0.85f, 1f };
+
+        // Chave nova: a antiga ("render.quality") tinha 3 níveis com outro significado.
+        private const string RenderQualityKey = "render.level";
+        private static int renderQualityCache = -1;
+
+        /// <summary>Qualidade de renderização escolhida pelo jogador (é o teto da qualidade automática).</summary>
+        public static int GetRenderQuality()
+        {
+            if (renderQualityCache < 0) renderQualityCache = Mathf.Clamp(PlayerPrefs.GetInt(RenderQualityKey, DefaultRenderQuality), RenderLow, RenderUltra);
+            return renderQualityCache;
+        }
+
+        public static void SetRenderQuality(int level)
+        {
+            renderQualityCache = Mathf.Clamp(level, RenderLow, RenderUltra);
+            PlayerPrefs.SetInt(RenderQualityKey, renderQualityCache);
+        }
+
+        /// <summary>Fração da resolução da tela usada por um nível (0 a 4).</summary>
+        public static float GetRenderScale(int level) => RenderScales[Mathf.Clamp(level, RenderLow, RenderUltra)];
+
+        /// <summary>Só o nível Ultra liga o pós-processamento (os outros ficam sem o passe de pós, que custa um quadro cheio).</summary>
+        public static bool UsesPostProcessing(int level) => level >= RenderUltra;
+
+        /// <summary>Quantos níveis de resolução a qualidade automática tirou (é o primeiro item a reduzir). Não é gravado.</summary>
+        public static int AutoRenderReduction { get; set; }
+
+        /// <summary>Nível de renderização que vale agora: a escolha do jogador menos o corte da qualidade automática.</summary>
+        public static int EffectiveRenderQuality => Mathf.Max(RenderLow, GetRenderQuality() - AutoRenderReduction);
+
         // Qualidade do solo: liga o mapa de normal (relevo) das texturas de chão. Desligada (padrão) é o mais leve.
         private const string GroundQualityKey = "ground.quality";
         private static int groundQualityCache = -1;
@@ -192,7 +233,7 @@ namespace PROCEDURAL_GAME.Core
 
         public static void SetSavedAutoLevel(string biomeName, int level) => PlayerPrefs.SetInt(AutoLevelKeyPrefix + biomeName, level);
 
-        /// <summary>Apaga as escolhas gerais (FPS alvo, contador, qualidade automática, sombras, distância de visão e qualidade do solo): voltam a valer os valores da cena.</summary>
+        /// <summary>Apaga as escolhas gerais (FPS alvo, contador, qualidade automática, sombras, distância de visão e qualidade do solo e de renderização): voltam a valer os valores da cena.</summary>
         public static void ResetGeneral()
         {
             PlayerPrefs.DeleteKey(TargetFpsKey);
@@ -202,6 +243,8 @@ namespace PROCEDURAL_GAME.Core
             PlayerPrefs.DeleteKey(ShadowLevelKey);
             PlayerPrefs.DeleteKey(ViewLevelKey);
             PlayerPrefs.DeleteKey(GroundQualityKey);
+            PlayerPrefs.DeleteKey(RenderQualityKey);
+            renderQualityCache = -1;
             shadowLevelCache = -1;
             viewLevelCache = -1;
             groundQualityCache = -1;
@@ -220,7 +263,9 @@ namespace PROCEDURAL_GAME.Core
             shadowLevelCache = -1;
             viewLevelCache = -1;
             groundQualityCache = -1;
+            renderQualityCache = -1;
             AutoGroundCut = false;
+            AutoRenderReduction = 0;
         }
     }
 }
