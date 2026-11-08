@@ -24,7 +24,7 @@ MonoBehaviour:
   salt: 41
   categoryId: palms
   category: Palmeiras
-  attemptsPerChunk: 4
+  attemptsPerChunk: 6
   minSpacing: 8
   spacingByDensity: 1
   spacingJitter: 0.25

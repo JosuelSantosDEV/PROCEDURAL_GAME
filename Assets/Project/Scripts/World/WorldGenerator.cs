@@ -208,6 +208,9 @@ namespace PROCEDURAL_GAME.World
 
                 // Efeito de estar debaixo d'água (neblina e cor azuladas).
                 if (GetComponent<UnderwaterController>() == null) gameObject.AddComponent<UnderwaterController>();
+
+                // Espuma e ondas do Player ao andar na água, e o splash de entrada.
+                if (GetComponent<WaterWakeController>() == null) gameObject.AddComponent<WaterWakeController>();
             }
 
             if (biome.scatter != null && biome.scatter.Length > 0)

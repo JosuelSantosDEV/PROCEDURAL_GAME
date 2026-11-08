@@ -29,19 +29,22 @@ namespace PROCEDURAL_GAME.World
         [Tooltip("Profundidade no centro, em metros. Fundo em forma de tigela, com margem suave. 4 a 5 m dá para nadar por baixo.")]
         [Min(0.5f)] public float maxDepth = 4.5f;
 
-        [Tooltip("Profundidade do barranco: quanto a água fica ABAIXO do terreno em volta (o lago é uma depressão, como na ilustração). Nível da água = altura natural no centro do lago menos isto. Cada lago tem o próprio nível.")]
-        [Min(0.3f)] public float levelOffset = 3.5f;
+        [Tooltip("Profundidade da depressão: quanto a água fica ABAIXO do terreno em volta. O terreno desce suavemente até a água (ilustração depressao_desejada). Nível da água = altura natural no centro do lago menos isto. Cada lago tem o próprio nível.")]
+        [Min(0.3f)] public float levelOffset = 6f;
 
         [Tooltip("Sem lago a esta distância (m) do ponto (0, 0): o Player nunca começa perto da água. Alto de propósito: é preciso explorar.")]
         [Min(0f)] public float clearRadius = 250f;
 
         [Header("Margem")]
-        [Tooltip("Até que distância da margem (m) o relevo ainda é suavizado de volta para a altura natural. O barranco em si ocupa a faixa de areia nua; daí até aqui o platô se mistura ao terreno natural.")]
-        [Min(5f)] public float shoreReach = 45f;
+        [Tooltip("Largura da depressão, em metros a partir da margem: o terreno desce suavemente de fora até a água ao longo desta distância.")]
+        [Min(8f)] public float depressionMeters = 64f;
+
+        [Tooltip("Até que distância da margem (m) o relevo ainda é suavizado de volta para a altura natural (depois da depressão, a mistura vai até aqui).")]
+        [Min(5f)] public float shoreReach = 100f;
 
         [Header("Faixas em volta do lago (metros a partir da margem)")]
-        [Tooltip("De 0 até aqui: só areia, nem palmeira nem arbusto. É também a LARGURA DO BARRANCO: o terreno desce em S do platô até a água nesta faixa.")]
-        [Min(4f)] public float bareSandMeters = 16f;
+        [Tooltip("De 0 até aqui: só areia, nem palmeira nem arbusto.")]
+        [Min(0f)] public float bareSandMeters = 16f;
 
         [Tooltip("Depois da areia nua, por esta largura: SÓ palmeiras e arbustos, com o chão todo de areia.")]
         [Min(0f)] public float palmMeters = 30f;
@@ -49,11 +52,17 @@ namespace PROCEDURAL_GAME.World
         [Tooltip("Depois da faixa só das palmeiras, por esta largura: árvores, arbustos e palmeiras juntos, em manchas, e o chão vai de areia para a textura da floresta (sem fronteira nítida). Mais perto do lago, mais palmeiras; mais longe, mais árvores.")]
         [Min(1f)] public float mixMeters = 30f;
 
+        [Tooltip("Depois da mistura, por esta largura: ainda é a floresta normal (chão de floresta), mas com manchas de palmeiras que vão ficando mais raras para fora. As palmeiras começam a aparecer aqui, DENTRO da floresta, bem antes da areia.")]
+        [Min(0f)] public float introMeters = 50f;
+
+        [Tooltip("Chance (0 a 1) de uma mancha ser de palmeiras no limite entre a mistura e a floresta (cai a 0 no fim da faixa acima). Maior = mais palmeiras entre as árvores.")]
+        [Range(0f, 1f)] public float introPalmShare = 0.45f;
+
         [Tooltip("Tamanho, em metros, das manchas de palmeiras e de árvores na faixa de mistura. Uma palmeira nunca nasce junto de uma árvore: cada mancha é de um tipo só.")]
-        [Min(8f)] public float patchMeters = 32f;
+        [Min(8f)] public float patchMeters = 20f;
 
         [Tooltip("Folga, em metros, entre uma mancha de palmeiras e uma de árvores (nada nasce na faixa entre elas). Evita palmeira dentro de árvore.")]
-        [Min(0f)] public float patchGapMeters = 9f;
+        [Min(0f)] public float patchGapMeters = 3.5f;
 
         [Header("Debaixo d'água")]
         [Tooltip("Cor da neblina e do ambiente quando a câmera está debaixo d'água.")]
@@ -65,12 +74,6 @@ namespace PROCEDURAL_GAME.World
         [Header("Visual")]
         [Tooltip("Material da água (shader PROCEDURAL_GAME/Water). Criado por PROCEDURAL_GAME > Create Procedural World.")]
         public Material waterMaterial;
-
-        [Tooltip("Cor da água rasa (junto da margem), em sRGB.")]
-        public Color shallowColor = new Color(0.34f, 0.46f, 0.40f);
-
-        [Tooltip("Cor da água funda, em sRGB.")]
-        public Color deepColor = new Color(0.07f, 0.17f, 0.19f);
 
         [Tooltip("Textura da areia da margem e das faixas em volta do lago (cor que se repete).")]
         public Texture2D sandTexture;
@@ -87,13 +90,16 @@ namespace PROCEDURAL_GAME.World
         /// <summary>Distância da margem (m) em que acaba a faixa SÓ de palmeiras e arbustos (o chão ainda é todo de areia).</summary>
         public float PalmOnlyEnd => bareSandMeters + palmMeters;
 
-        /// <summary>Distância da margem (m) em que acaba a mistura: dali para fora é a floresta normal.</summary>
+        /// <summary>Distância da margem (m) em que acaba a mistura (o chão já é o da floresta; ainda há palmeiras, mais raras).</summary>
         public float MixEnd => PalmOnlyEnd + mixMeters;
 
-        /// <summary>Distância da margem (m) a partir da qual o lago não influencia mais nada.</summary>
-        public float TotalReach => Mathf.Max(shoreReach, MixEnd + patchMeters);
+        /// <summary>Distância da margem (m) em que acabam as palmeiras: dali para fora é a floresta normal.</summary>
+        public float IntroEnd => MixEnd + introMeters;
 
-        /// <summary>Distância da margem (m) em que o barranco termina e começa a mistura com o relevo natural (nunca menor que o barranco + 5 m).</summary>
-        public float BlendEnd => Mathf.Max(shoreReach, bareSandMeters + 5f);
+        /// <summary>Distância da margem (m) a partir da qual o lago não influencia mais nada.</summary>
+        public float TotalReach => Mathf.Max(shoreReach, IntroEnd + patchMeters);
+
+        /// <summary>Distância da margem (m) em que a mistura da depressão com o relevo natural termina (nunca menor que a depressão + 5 m).</summary>
+        public float BlendEnd => Mathf.Max(shoreReach, depressionMeters + 5f);
     }
 }

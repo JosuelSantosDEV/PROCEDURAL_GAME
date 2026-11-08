@@ -148,24 +148,26 @@ namespace PROCEDURAL_GAME.World
                 return level - settings.maxDepth * (1f - r * r);
             }
 
-            // O lago é uma depressão (ilustração lago_procedural): a borda do platô fica 'levelOffset' acima da água.
-            float rim = level + settings.levelOffset;
-            float width = Mathf.Max(4f, settings.bareSandMeters);
+            // O lago é uma DEPRESSÃO larga (ilustração depressao_desejada): o próprio terreno desce de fora até a água, sem
+            // barranco. 'top' = altura de onde a descida parte: a do centro do lago ('levelOffset' acima da água) misturada à natural
+            // (guarda um pouco do relevo local), nunca menos de 2 m acima da água.
+            float width = Mathf.Max(8f, settings.depressionMeters);
+            float top = Mathf.Max(level + 2f, Mathf.Lerp(level + settings.levelOffset, natural, 0.5f));
 
             if (d < width)
             {
-                // Barranco (faixa de areia nua): desce em S do platô até a água. Um pouco de rampa linear (15%) evita uma "quina" na água.
+                // Quase uma rampa constante, só arredondada no alto (70% de S): inclinação ~0,03 junto da água e ~0,13 no meio.
                 float t = d / width;
-                float profile = 0.15f * t + 0.85f * Mathf.SmoothStep(0f, 1f, t);
-                return level + (rim - level) * profile;
+                float profile = Mathf.Lerp(t, Mathf.SmoothStep(0f, 1f, t), 0.7f);
+                return level + (top - level) * profile;
             }
 
             float blendEnd = settings.BlendEnd;
             if (d < blendEnd)
             {
-                // Platô: parte da borda e se mistura devagar ao relevo natural.
+                // Depois da depressão: volta devagar ao relevo natural.
                 float blend = Mathf.SmoothStep(0f, 1f, (d - width) / (blendEnd - width));
-                return Mathf.Lerp(rim, natural, blend);
+                return Mathf.Lerp(top, natural, blend);
             }
 
             return natural;
@@ -201,9 +203,9 @@ namespace PROCEDURAL_GAME.World
         /// <summary>
         /// Se um objeto da faixa <paramref name="band"/> pode nascer em (<paramref name="x"/>, <paramref name="z"/>), a
         /// <paramref name="d"/> metros da margem. Regras, de dentro para fora:
-        /// 0 a 'Bare Sand': nada. Até o fim de 'Palm Meters': só palmeiras e arbustos. Em 'Mix Meters': árvores, arbustos e palmeiras,
-        /// as palmeiras e as árvores em manchas separadas (uma palmeira nunca fica junto de uma árvore) e com mais palmeiras perto
-        /// do lago. Depois: floresta normal.
+        /// 0 a 'Bare Sand': nada. Até o fim de 'Palm Meters': só palmeiras e arbustos. Em 'Mix Meters' e 'Intro Meters': árvores,
+        /// arbustos e palmeiras, as palmeiras e as árvores em manchas separadas (uma palmeira nunca fica junto de uma árvore),
+        /// com mais palmeiras perto do lago e palmeiras raras já dentro da floresta (a faixa de entrada). Depois: floresta normal.
         /// </summary>
         public bool Allows(LakeBand band, float x, float z, float d)
         {
@@ -213,7 +215,7 @@ namespace PROCEDURAL_GAME.World
             switch (band)
             {
                 case LakeBand.Palms:
-                    if (d < settings.bareSandMeters || d >= settings.MixEnd) return false;
+                    if (d < settings.bareSandMeters || d >= settings.IntroEnd) return false;
                     return PatchAllows(true, x, z);
 
                 case LakeBand.Shrubs:
@@ -221,8 +223,8 @@ namespace PROCEDURAL_GAME.World
 
                 case LakeBand.NormalTrees:
                     if (d < settings.PalmOnlyEnd) return false;
-                    // Um pouco além da mistura ainda vale a folga em relação às manchas de palmeiras.
-                    if (d >= settings.MixEnd + settings.patchMeters) return true;
+                    // Um pouco além das palmeiras ainda vale a folga em relação às manchas delas.
+                    if (d >= settings.IntroEnd + settings.patchMeters) return true;
                     return PatchAllows(false, x, z);
 
                 default:
@@ -236,7 +238,7 @@ namespace PROCEDURAL_GAME.World
         // ---------------------------------------------------------------------------------------------------------------
 
         // O mundo (deformado por ruído) é dividido em quadrados de 'patchMeters'. Cada quadrado é de palmeiras ou de árvores,
-        // sorteado com a chance de palmeira diminuindo da faixa só das palmeiras (100%) até o fim da mistura (0%). Um objeto só
+        // sorteado com a chance de palmeira de PalmChance (100% junto do lago, 0% no fim da faixa de entrada). Um objeto só
         // nasce no quadrado do seu tipo e a pelo menos 'patchGapMeters' de qualquer quadrado do outro tipo: então palmeira e
         // árvore ficam sempre separadas por essa folga (no espaço deformado; a deformação é suave, o erro é pequeno).
         private bool PatchAllows(bool palm, float x, float z)
@@ -269,6 +271,23 @@ namespace PROCEDURAL_GAME.World
             return true;
         }
 
+        // Chance de um quadrado a 'd' metros da margem ser de palmeiras: 100% até o fim da faixa só das palmeiras; cai até
+        // 'introPalmShare' no fim da mistura; daí cai a 0% no fim da faixa de entrada (palmeiras raras DENTRO da floresta).
+        private float PalmChance(float d)
+        {
+            float onlyEnd = settings.PalmOnlyEnd;
+            if (d <= onlyEnd) return 1f;
+
+            float share = settings.introPalmShare;
+            float mixEnd = settings.MixEnd;
+            if (d < mixEnd) return Mathf.Lerp(1f, share, Mathf.SmoothStep(0f, 1f, (d - onlyEnd) / Mathf.Max(0.01f, settings.mixMeters)));
+
+            float introEnd = settings.IntroEnd;
+            if (d < introEnd) return share * (1f - Mathf.SmoothStep(0f, 1f, (d - mixEnd) / Mathf.Max(0.01f, settings.introMeters)));
+
+            return 0f;
+        }
+
         private bool IsPalmTile(int tileX, int tileZ, float size)
         {
             long key = ((long)tileX << 32) ^ (uint)tileZ;
@@ -276,13 +295,7 @@ namespace PROCEDURAL_GAME.World
 
             // Distância da margem no centro do quadrado (tratado como ponto do mundo, mesmo deformado).
             float d = ShoreDistance((tileX + 0.5f) * size, (tileZ + 0.5f) * size);
-            float chance = 0f;
-            if (d < NoLake * 0.5f)
-            {
-                chance = d <= settings.PalmOnlyEnd
-                    ? 1f
-                    : 1f - Mathf.SmoothStep(0f, 1f, (d - settings.PalmOnlyEnd) / Mathf.Max(0.01f, settings.mixMeters));
-            }
+            float chance = d < NoLake * 0.5f ? PalmChance(d) : 0f;
 
             palm = Unit(tileX, tileZ, 20) < chance;
             patchCache[key] = palm;

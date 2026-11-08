@@ -520,7 +520,7 @@ namespace PROCEDURAL_GAME.EditorTools
             {
                 profile.prefabs = FindPalmPrefabs();
                 profile.salt = 41;
-                profile.attemptsPerChunk = 4f;      // grade de ~16 m: uma palmeira a cada ~256 m², só na faixa em volta do lago
+                profile.attemptsPerChunk = 6f;      // grade de ~13 m: uma palmeira a cada ~170 m², só na faixa em volta do lago
                 profile.spacingByDensity = true;
                 profile.spacingJitter = 0.25f;
                 profile.minSpacing = 8f;

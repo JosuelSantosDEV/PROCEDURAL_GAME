@@ -19,18 +19,25 @@ Material:
   m_CustomRenderQueue: -1
   stringTagMap: {}
   disabledShaderPasses: []
-  m_LockedProperties: 
+  m_LockedProperties:
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
+    - _DayLightRef: 0.35
+    - _EdgeFade: 0.3
+    - _FoamAmount: 0.85
     - _Glint: 0.8
     - _GlintSharpness: 90
     - _LidBrightness: 2.5
+    - _MaxAlpha: 0.92
     - _Reflectivity: 0.2
-    - _SelfLight: 0.3
+    - _SelfLight: 0.5
     - _SkyBrightness: 1
-    - _WaveStrength: 0.05
-    m_Colors: []
+    - _WaveStrength: 0.08
+    m_Colors:
+    - _DeepColor: {r: 0.09, g: 0.27, b: 0.3, a: 1}
+    - _FoamColor: {r: 0.9, g: 0.96, b: 0.94, a: 1}
+    - _ShallowColor: {r: 0.3, g: 0.5, b: 0.47, a: 1}
   m_BuildTextureStacks: []

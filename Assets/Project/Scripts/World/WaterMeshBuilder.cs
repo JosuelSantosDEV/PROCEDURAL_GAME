@@ -5,8 +5,8 @@ namespace PROCEDURAL_GAME.World
 {
     /// <summary>
     /// Monta a malha de água de um chunk: um plano na altura do lago, só nos quadradinhos que tocam o lago (mais uma folga que fica
-    /// escondida sob o terreno da margem). A cor de cada vértice vem da profundidade (raso claro, fundo escuro), então a água é
-    /// opaca e não precisa de textura de profundidade. Devolve falso quando o chunk não tem lago (o objeto da água fica desligado).
+    /// escondida sob o terreno da margem). Os vértices levam a profundidade (vermelho): o shader tira dela a cor e a transparência
+    /// (quase transparente na margem) sem textura de profundidade nem cópia da tela (barato no celular). Devolve falso quando o chunk não tem lago (o objeto da água fica desligado).
     /// Reaproveita os buffers a cada chamada. Não é thread-safe.
     /// </summary>
     public sealed class WaterMeshBuilder
@@ -20,8 +20,6 @@ namespace PROCEDURAL_GAME.World
         private readonly LakeSettings settings;
         private readonly float chunkSize;
         private readonly int cells;
-        private readonly Color shallow;
-        private readonly Color deep;
 
         private readonly Vector3[] vertices;
         private readonly Color32[] colors;
@@ -41,8 +39,6 @@ namespace PROCEDURAL_GAME.World
             colors = new Color32[side * side];
             nearLake = new bool[side * side];
 
-            shallow = settings.shallowColor;
-            deep = settings.deepColor;
         }
 
         /// <summary>Preenche <paramref name="mesh"/> (posição local do chunk) e diz se há água neste chunk.</summary>
@@ -75,12 +71,11 @@ namespace PROCEDURAL_GAME.World
 
                     vertices[index] = new Vector3(x * step, level, z * step);
 
-                    // Profundidade = nível da água menos o terreno (já escavado). Raso (e a folga sob a margem) = cor clara.
+                    // Vermelho = profundidade linear (0 na margem ... 1 na profundidade máxima). O shader tira dela a cor e a
+                    // transparência (quase transparente na margem). Sem textura de profundidade: tudo vem da malha.
                     float depth = level - terrain.GetHeight(worldX, worldZ);
-                    float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(depth / settings.maxDepth));
-                    Color color = Color.Lerp(shallow, deep, t);
-                    // Gravada em sRGB (o shader converte): em linear os tons escuros viravam 0 ou 1 de 255 e a água saía preta.
-                    colors[index] = color;
+                    float t = Mathf.Clamp01(depth / settings.maxDepth);
+                    colors[index] = new Color32((byte)Mathf.RoundToInt(t * 255f), 0, 0, 255);
                 }
             }
 
