@@ -17,11 +17,11 @@ namespace PROCEDURAL_GAME.World
         public bool enabled = false;
 
         [Header("Onde e quão grandes")]
-        [Tooltip("Lado, em metros, da célula do mundo que pode ter UM lago. Maior = lagos mais raros.")]
-        [Min(150f)] public float cellSize = 288f;
+        [Tooltip("Lado, em metros, da célula do mundo que pode ter UM lago. Maior = lagos mais raros. Água é recurso escasso: o Player precisa explorar para achar.")]
+        [Min(150f)] public float cellSize = 520f;
 
-        [Tooltip("Chance de uma célula ter lago (0 a 1).")]
-        [Range(0f, 1f)] public float chance = 0.6f;
+        [Tooltip("Chance de uma célula ter lago (0 a 1). Com 520 m e 0,3: em média um lago a cada ~850 m de caminhada em linha reta.")]
+        [Range(0f, 1f)] public float chance = 0.3f;
 
         [Tooltip("Raio médio do lago, em metros (mínimo e máximo sorteados por lago). O contorno é irregular: o raio varia cerca de ±40% conforme o ângulo.")]
         public Vector2 radiusRange = new Vector2(28f, 44f);
@@ -29,22 +29,19 @@ namespace PROCEDURAL_GAME.World
         [Tooltip("Profundidade no centro, em metros. Fundo em forma de tigela, com margem suave. 4 a 5 m dá para nadar por baixo.")]
         [Min(0.5f)] public float maxDepth = 4.5f;
 
-        [Tooltip("Nível da água = altura natural do terreno no centro do lago menos isto. Cada lago tem o próprio nível.")]
-        public float levelOffset = 0.3f;
+        [Tooltip("Profundidade do barranco: quanto a água fica ABAIXO do terreno em volta (o lago é uma depressão, como na ilustração). Nível da água = altura natural no centro do lago menos isto. Cada lago tem o próprio nível.")]
+        [Min(0.3f)] public float levelOffset = 3.5f;
 
-        [Tooltip("Sem lago a esta distância (m) do ponto (0, 0): o Player nunca começa na água.")]
-        [Min(0f)] public float clearRadius = 90f;
+        [Tooltip("Sem lago a esta distância (m) do ponto (0, 0): o Player nunca começa perto da água. Alto de propósito: é preciso explorar.")]
+        [Min(0f)] public float clearRadius = 250f;
 
         [Header("Margem")]
-        [Tooltip("Largura, em metros, em que o relevo é suavizado em volta do lago (da margem para fora), para não haver paredão na margem.")]
+        [Tooltip("Até que distância da margem (m) o relevo ainda é suavizado de volta para a altura natural. O barranco em si ocupa a faixa de areia nua; daí até aqui o platô se mistura ao terreno natural.")]
         [Min(5f)] public float shoreReach = 45f;
 
-        [Tooltip("Inclinação da margem logo acima da água (metros de altura por metro de distância).")]
-        [Range(0.02f, 0.5f)] public float bankSlope = 0.12f;
-
         [Header("Faixas em volta do lago (metros a partir da margem)")]
-        [Tooltip("De 0 até aqui: só areia. Nem palmeira nem arbusto.")]
-        [Min(0f)] public float bareSandMeters = 15f;
+        [Tooltip("De 0 até aqui: só areia, nem palmeira nem arbusto. É também a LARGURA DO BARRANCO: o terreno desce em S do platô até a água nesta faixa.")]
+        [Min(4f)] public float bareSandMeters = 16f;
 
         [Tooltip("Depois da areia nua, por esta largura: SÓ palmeiras e arbustos, com o chão todo de areia.")]
         [Min(0f)] public float palmMeters = 30f;
@@ -69,11 +66,11 @@ namespace PROCEDURAL_GAME.World
         [Tooltip("Material da água (shader PROCEDURAL_GAME/Water). Criado por PROCEDURAL_GAME > Create Procedural World.")]
         public Material waterMaterial;
 
-        [Tooltip("Cor da água rasa (junto da margem).")]
-        public Color shallowColor = new Color(0.20f, 0.27f, 0.24f);
+        [Tooltip("Cor da água rasa (junto da margem), em sRGB.")]
+        public Color shallowColor = new Color(0.34f, 0.46f, 0.40f);
 
-        [Tooltip("Cor da água funda.")]
-        public Color deepColor = new Color(0.02f, 0.05f, 0.06f);
+        [Tooltip("Cor da água funda, em sRGB.")]
+        public Color deepColor = new Color(0.07f, 0.17f, 0.19f);
 
         [Tooltip("Textura da areia da margem e das faixas em volta do lago (cor que se repete).")]
         public Texture2D sandTexture;
@@ -95,5 +92,8 @@ namespace PROCEDURAL_GAME.World
 
         /// <summary>Distância da margem (m) a partir da qual o lago não influencia mais nada.</summary>
         public float TotalReach => Mathf.Max(shoreReach, MixEnd + patchMeters);
+
+        /// <summary>Distância da margem (m) em que o barranco termina e começa a mistura com o relevo natural (nunca menor que o barranco + 5 m).</summary>
+        public float BlendEnd => Mathf.Max(shoreReach, bareSandMeters + 5f);
     }
 }

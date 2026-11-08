@@ -25,9 +25,12 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _Glint: 0.6
+    - _Glint: 0.8
     - _GlintSharpness: 90
-    - _SkyReflection: 0.35
-    - _WaveStrength: 0.035
+    - _LidBrightness: 2.5
+    - _Reflectivity: 0.2
+    - _SelfLight: 0.3
+    - _SkyBrightness: 1
+    - _WaveStrength: 0.05
     m_Colors: []
   m_BuildTextureStacks: []

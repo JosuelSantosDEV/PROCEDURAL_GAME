@@ -1,16 +1,21 @@
-// Água dos lagos: OPACA, sem textura e sem textura de profundidade (barata no celular). A cor vem dos vértices da malha (raso claro,
-// fundo escuro, calculada em WaterMeshBuilder). Por cima da cor: um brilho do sol sobre pequenas ondas (cálculo no próprio pixel,
-// sem textura), um leve reflexo da cor do céu/neblina nas bordas (fresnel) e a neblina do jogo.
+// Água dos lagos: OPACA, sem textura e sem textura de profundidade (barata no celular). A cor de cada vértice (gravada em sRGB, por
+// causa da precisão de 8 bits nos tons escuros) vem da profundidade (raso claro, fundo escuro, ver WaterMeshBuilder). Por cima da cor:
+// luz própria (a água não fica preta com o ambiente escuro), reflexo da cor do céu/neblina com fresnel (Schlick: de cima reflete pouco,
+// rasante vira espelho), brilho do sol sobre pequenas ondas (senos no próprio pixel) e a neblina do jogo.
 // Desenhada ANTES do terreno (fila Geometry-10): o terreno que fica embaixo da água é descartado pelo teste de profundidade e
-// não é sombreado à toa. Os dois lados são desenhados: visto de baixo (nadando) o plano é uma "tampa" escura.
+// não é sombreado à toa. Os dois lados são desenhados: visto de baixo (nadando) o plano é o "teto" da água, claro e com ondulação,
+// na cor da neblina submersa (sem faixa preta quando a câmera passa pela superfície).
 Shader "PROCEDURAL_GAME/Water"
 {
     Properties
     {
-        _Glint ("Brilho do sol", Range(0, 2)) = 0.6
+        _Glint ("Brilho do sol", Range(0, 2)) = 0.8
         _GlintSharpness ("Nitidez do brilho", Range(8, 256)) = 90
-        _WaveStrength ("Força das ondas", Range(0, 0.15)) = 0.035
-        _SkyReflection ("Reflexo do céu nas bordas", Range(0, 1)) = 0.35
+        _WaveStrength ("Força das ondas", Range(0, 0.15)) = 0.05
+        _Reflectivity ("Reflexo olhando de cima (F0)", Range(0, 1)) = 0.2
+        _SkyBrightness ("Brilho do reflexo do céu", Range(0, 2)) = 1.0
+        _SelfLight ("Luz própria da água", Range(0, 1)) = 0.3
+        _LidBrightness ("Brilho do teto visto de baixo", Range(0.5, 6)) = 2.5
     }
 
     SubShader
@@ -40,7 +45,10 @@ Shader "PROCEDURAL_GAME/Water"
                 half _Glint;
                 half _GlintSharpness;
                 half _WaveStrength;
-                half _SkyReflection;
+                half _Reflectivity;
+                half _SkyBrightness;
+                half _SelfLight;
+                half _LidBrightness;
             CBUFFER_END
 
             struct Attributes
@@ -76,16 +84,25 @@ Shader "PROCEDURAL_GAME/Water"
                 Light mainLight = GetMainLight();
                 half3 ambient = SampleSH(half3(0, 1, 0));
 
-                // Visto de baixo (câmera dentro d'água): tampa escura, sem brilho.
-                if (!IS_FRONT_VFACE(isFront, true, false))
-                {
-                    half3 under = input.color * (ambient + mainLight.color * 0.1h) * 0.5h;
-                    return half4(MixFog(under, input.fogFactor), 1.0h);
-                }
-
-                // Ondas: a inclinação da superfície varia no espaço e no tempo com senos baratos (sem textura).
                 float2 p = input.positionWS.xz;
                 float t = _Time.y;
+
+                // Visto de baixo (câmera dentro d'água): o teto da água, na cor da neblina submersa (mais clara que ela, com
+                // ondulação de luz). Perto da câmera é um pouco mais claro; longe a neblina o dissolve. Nada de preto.
+                if (!IS_FRONT_VFACE(isFront, true, false))
+                {
+                    half ripple = 0.5h + 0.5h * (half)(sin(p.x * 0.9 + t * 0.8) * sin(p.y * 1.1 - t * 0.6));
+                    half3 lid = unity_FogColor.rgb * _LidBrightness * (0.75h + 0.5h * ripple) + mainLight.color * 0.05h * ripple;
+                    return half4(MixFog(lid, input.fogFactor), 1.0h);
+                }
+
+                // Cor do vértice: sRGB -> linear (projeto em Linear).
+                half3 baseColor = input.color;
+                #ifndef UNITY_COLORSPACE_GAMMA
+                baseColor = FastSRGBToLinear(baseColor);
+                #endif
+
+                // Ondas: a inclinação da superfície varia no espaço e no tempo com senos baratos (sem textura).
                 float2 slope = float2(sin(p.x * 0.7 + t * 0.9) + sin(p.y * 1.1 - t * 0.7),
                                       cos(p.x * 1.3 - t * 0.6) + sin(p.y * 0.9 + t * 1.1)) * _WaveStrength;
                 half3 normal = normalize(half3(slope.x, 1.0h, slope.y));
@@ -93,11 +110,15 @@ Shader "PROCEDURAL_GAME/Water"
                 half3 halfDir = normalize(mainLight.direction + viewDir);
                 half glint = pow(saturate(dot(normal, halfDir)), _GlintSharpness) * _Glint;
 
-                half3 color = input.color * (ambient + mainLight.color * 0.35h) + mainLight.color * glint;
+                // Cor da água em si (luz própria evita o preto com ambiente escuro).
+                half3 diffuse = baseColor * (ambient + mainLight.color * 0.35h + _SelfLight);
 
-                // Fresnel: de longe (ângulo raso) a água reflete a cor do céu/neblina.
-                half fresnel = pow(1.0h - saturate(dot(normal, viewDir)), 4.0h) * _SkyReflection;
-                color = lerp(color, unity_FogColor.rgb, fresnel);
+                // Fresnel de Schlick: de cima reflete pouco (_Reflectivity); em ângulo raso reflete o céu/neblina quase por inteiro.
+                half ndv = saturate(dot(normal, viewDir));
+                half fresnel = _Reflectivity + (1.0h - _Reflectivity) * pow(1.0h - ndv, 5.0h);
+                half3 sky = unity_FogColor.rgb * _SkyBrightness;
+
+                half3 color = lerp(diffuse, sky, fresnel) + mainLight.color * glint;
 
                 return half4(MixFog(color, input.fogFactor), 1.0h);
             }
@@ -125,7 +146,10 @@ Shader "PROCEDURAL_GAME/Water"
                 half _Glint;
                 half _GlintSharpness;
                 half _WaveStrength;
-                half _SkyReflection;
+                half _Reflectivity;
+                half _SkyBrightness;
+                half _SelfLight;
+                half _LidBrightness;
             CBUFFER_END
 
             struct Attributes

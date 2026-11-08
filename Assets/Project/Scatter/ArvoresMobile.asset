@@ -16,7 +16,7 @@ MonoBehaviour:
   groups:
   - id: 5Arms
     displayName: 5Arms
-    elevation: -1
+    elevation: -2
     colliderScale: 4.5
     weight: 1
     preference: 3

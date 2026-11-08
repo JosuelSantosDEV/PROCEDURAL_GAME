@@ -20,7 +20,6 @@ namespace PROCEDURAL_GAME.World
         private readonly LakeSettings settings;
         private readonly float chunkSize;
         private readonly int cells;
-        private readonly bool convertToLinear;
         private readonly Color shallow;
         private readonly Color deep;
 
@@ -42,7 +41,6 @@ namespace PROCEDURAL_GAME.World
             colors = new Color32[side * side];
             nearLake = new bool[side * side];
 
-            convertToLinear = QualitySettings.activeColorSpace == ColorSpace.Linear;
             shallow = settings.shallowColor;
             deep = settings.deepColor;
         }
@@ -81,7 +79,8 @@ namespace PROCEDURAL_GAME.World
                     float depth = level - terrain.GetHeight(worldX, worldZ);
                     float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(depth / settings.maxDepth));
                     Color color = Color.Lerp(shallow, deep, t);
-                    colors[index] = convertToLinear ? color.linear : color;
+                    // Gravada em sRGB (o shader converte): em linear os tons escuros viravam 0 ou 1 de 255 e a água saía preta.
+                    colors[index] = color;
                 }
             }
 

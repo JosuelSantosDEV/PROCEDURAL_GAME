@@ -109,6 +109,9 @@ namespace PROCEDURAL_GAME.World
 
         public float ChunkSize => chunkSize;
 
+        /// <summary>Posição atual do Player (o alvo do mundo).</summary>
+        public Vector3 TargetPosition => target.position;
+
         /// <summary>
         /// Muda a distância de carregamento (menu Desempenho ou qualidade automática). Chunks que ficam fora são devolvidos
         /// ao pool e os que faltam entram na fila normal.
@@ -385,6 +388,22 @@ namespace PROCEDURAL_GAME.World
             if (controller != null) controller.enabled = false;
             target.position = position;
             if (controller != null) controller.enabled = true;
+        }
+
+        /// <summary>
+        /// Leva o Player para (x, z): cria já o chão em volta (com colisão) e o põe em cima do terreno, para não cair no vazio
+        /// enquanto os chunks do destino ainda não existem. Usado pela ferramenta DEV (ir ao lago mais próximo).
+        /// </summary>
+        public void TeleportTarget(float x, float z)
+        {
+            CharacterController controller = target.GetComponent<CharacterController>();
+            if (controller != null) controller.enabled = false;
+            target.position = new Vector3(x, target.position.y, z);
+            if (controller != null) controller.enabled = true;
+
+            LoadInitialChunks();
+            PlaceTargetOnGround();
+            RefreshChunks(target.position);
         }
 
         /// <summary>

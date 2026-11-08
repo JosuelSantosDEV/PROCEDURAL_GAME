@@ -47,15 +47,14 @@ MonoBehaviour:
   shadowDistances: {x: 20, y: 30, z: 40}
   lakes:
     enabled: 1
-    cellSize: 288
-    chance: 0.6
+    cellSize: 520
+    chance: 0.3
     radiusRange: {x: 28, y: 44}
     maxDepth: 4.5
-    levelOffset: 0.3
-    clearRadius: 90
+    levelOffset: 3.5
+    clearRadius: 250
     shoreReach: 45
-    bankSlope: 0.12
-    bareSandMeters: 15
+    bareSandMeters: 16
     palmMeters: 30
     mixMeters: 30
     patchMeters: 32
@@ -63,8 +62,8 @@ MonoBehaviour:
     underwaterColor: {r: 0.04, g: 0.15, b: 0.17, a: 1}
     underwaterVisibility: 22
     waterMaterial: {fileID: 2100000, guid: 978999b1c8870ef4a88b9927ef947015, type: 2}
-    shallowColor: {r: 0.2, g: 0.27, b: 0.24, a: 1}
-    deepColor: {r: 0.02, g: 0.05, b: 0.06, a: 1}
+    shallowColor: {r: 0.34, g: 0.46, b: 0.4, a: 1}
+    deepColor: {r: 0.07, g: 0.17, b: 0.19, a: 1}
     sandTexture: {fileID: 2800000, guid: 8036df819e3d18f4d9331933151395fd, type: 3}
     sandNormal: {fileID: 2800000, guid: 441306576ccb2cf4dbfd115261a01164, type: 3}
     bedTexture: {fileID: 2800000, guid: 8983f756ed2dcf142b0739e30d638b3c, type: 3}

@@ -135,6 +135,13 @@ namespace PROCEDURAL_GAME.DevTools
             titleText.text = biome != null ? $"Desenvolvimento — {biome.DisplayName}" : "Desenvolvimento";
             statusText.text = string.Empty;
 
+            // Atalho para achar água (os lagos são raros de propósito): só em jogo e em biomas com lagos.
+            if (world != null && world.Lakes != null)
+            {
+                Button lake = UiKit.CreateButton(content, "GoToLake", "IR AO LAGO MAIS PRÓXIMO", new Vector2(0f, 90f), 34, DEV_GoToNearestLake);
+                UiKit.SetLayout(lake.gameObject, preferredHeight: 90f, flexibleWidth: 1f);
+            }
+
             List<ScatterProfile> profiles = DEV_TunableProfiles();
             if (profiles.Count == 0)
             {
@@ -255,6 +262,21 @@ namespace PROCEDURAL_GAME.DevTools
         }
 
         // ---- Ações ----
+
+        /// <summary>Leva o Player ao lago mais próximo (até ~4 km), 28 m da margem: no platô das palmeiras, olhando a água.</summary>
+        private void DEV_GoToNearestLake()
+        {
+            Vector3 position = world.TargetPosition;
+            if (!world.Lakes.TryFindNearest(position.x, position.z, 8, 28f, out Vector2 point, out float distance))
+            {
+                statusText.text = "Nenhum lago em ~4 km.";
+                return;
+            }
+
+            DEV_Close();
+            world.TeleportTarget(point.x, point.y);
+            Debug.Log($"[DEV] Teleportado para um lago a {distance:0} m (ponto {point.x:0}, {point.y:0}).");
+        }
 
         /// <summary>Refaz os objetos dos chunks já carregados com os valores novos (em jogo; no menu não há mundo).</summary>
         private void DEV_Apply()

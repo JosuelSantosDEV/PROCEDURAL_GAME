@@ -94,6 +94,43 @@ namespace PROCEDURAL_GAME.World
             return found;
         }
 
+        /// <summary>
+        /// Procura o lago mais próximo de (<paramref name="fromX"/>, <paramref name="fromZ"/>) num raio de <paramref name="maxCells"/> células
+        /// e devolve um ponto a <paramref name="offsetMeters"/> da margem, do lado de quem procura (para ficar em cima do platô, olhando a água).
+        /// <paramref name="centerDistance"/> = distância até o centro do lago.
+        /// </summary>
+        public bool TryFindNearest(float fromX, float fromZ, int maxCells, float offsetMeters, out Vector2 point, out float centerDistance)
+        {
+            point = Vector2.zero;
+            centerDistance = NoLake;
+
+            int cellX = Mathf.FloorToInt(fromX / settings.cellSize);
+            int cellZ = Mathf.FloorToInt(fromZ / settings.cellSize);
+            Lake best = null;
+
+            for (int dz = -maxCells; dz <= maxCells; dz++)
+            {
+                for (int dx = -maxCells; dx <= maxCells; dx++)
+                {
+                    Lake lake = GetLake(cellX + dx, cellZ + dz);
+                    if (!lake.exists) continue;
+
+                    float distance = Mathf.Sqrt((lake.centerX - fromX) * (lake.centerX - fromX) + (lake.centerZ - fromZ) * (lake.centerZ - fromZ));
+                    if (distance >= centerDistance) continue;
+
+                    centerDistance = distance;
+                    best = lake;
+                }
+            }
+
+            if (best == null) return false;
+
+            float angle = centerDistance > 0.01f ? Mathf.Atan2(fromZ - best.centerZ, fromX - best.centerX) : 0f;
+            float reach = RadiusAt(best, angle) + offsetMeters;
+            point = new Vector2(best.centerX + Mathf.Cos(angle) * reach, best.centerZ + Mathf.Sin(angle) * reach);
+            return true;
+        }
+
         /// <summary>Distância da margem (m): negativa dentro do lago; <see cref="NoLake"/> se não há lago por perto.</summary>
         public float ShoreDistance(float x, float z)
         {
@@ -111,12 +148,24 @@ namespace PROCEDURAL_GAME.World
                 return level - settings.maxDepth * (1f - r * r);
             }
 
-            if (d < settings.shoreReach)
+            // O lago é uma depressão (ilustração lago_procedural): a borda do platô fica 'levelOffset' acima da água.
+            float rim = level + settings.levelOffset;
+            float width = Mathf.Max(4f, settings.bareSandMeters);
+
+            if (d < width)
             {
-                // Margem: começa no nível da água e sobe devagar até a altura natural, sem paredão.
-                float blend = Mathf.SmoothStep(0f, 1f, d / settings.shoreReach);
-                float bank = level + settings.bankSlope * d;
-                return Mathf.Lerp(bank, natural, blend);
+                // Barranco (faixa de areia nua): desce em S do platô até a água. Um pouco de rampa linear (15%) evita uma "quina" na água.
+                float t = d / width;
+                float profile = 0.15f * t + 0.85f * Mathf.SmoothStep(0f, 1f, t);
+                return level + (rim - level) * profile;
+            }
+
+            float blendEnd = settings.BlendEnd;
+            if (d < blendEnd)
+            {
+                // Platô: parte da borda e se mistura devagar ao relevo natural.
+                float blend = Mathf.SmoothStep(0f, 1f, (d - width) / (blendEnd - width));
+                return Mathf.Lerp(rim, natural, blend);
             }
 
             return natural;
@@ -158,7 +207,8 @@ namespace PROCEDURAL_GAME.World
         /// </summary>
         public bool Allows(LakeBand band, float x, float z, float d)
         {
-            if (d >= NoLake * 0.5f) return true;
+            // Sem lago por perto: tudo nasce normalmente, MENOS palmeiras (só existem junto da água).
+            if (d >= NoLake * 0.5f) return band != LakeBand.Palms;
 
             switch (band)
             {
