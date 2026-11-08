@@ -52,6 +52,9 @@ namespace PROCEDURAL_GAME.Player
         [Tooltip("Velocidade (por segundo) com que o IK liga e desliga ao pousar/pular.")]
         [SerializeField, Min(1f)] private float fadeSpeed = 8f;
 
+        [Tooltip("Velocidade (por segundo) com que o IK religa ao pousar. Mais lenta que a de desligar: os pés não são puxados de uma vez para o chão durante o fade do pouso.")]
+        [SerializeField, Min(1f)] private float landFadeSpeed = 4f;
+
         private sealed class Foot
         {
             public AvatarIKGoal goal;
@@ -155,7 +158,7 @@ namespace PROCEDURAL_GAME.Player
 
             float dt = Time.deltaTime;
             bool wantIk = animator.GetBool(GroundedId) && Time.time >= airUntil;
-            ikWeight = Mathf.MoveTowards(ikWeight, wantIk ? 1f : 0f, fadeSpeed * dt);
+            ikWeight = Mathf.MoveTowards(ikWeight, wantIk ? 1f : 0f, (wantIk ? landFadeSpeed : fadeSpeed) * dt);
 
             // Pivô do modelo: onde as animações supõem que o chão está (com o corpo já abaixado) e onde ele estaria sem o ajuste.
             float originY = transform.position.y;

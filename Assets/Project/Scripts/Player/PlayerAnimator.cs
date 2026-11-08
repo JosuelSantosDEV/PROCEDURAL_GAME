@@ -31,6 +31,9 @@ namespace PROCEDURAL_GAME.Player
         // e só então consegue sair do estado de ar; sem essa folga o gatilho do pouso poderia ser perdido.
         private const float LandedWindow = 0.25f;
 
+        // Queda sem pulo mais curta que isto (s): ressalto do terreno correndo. Não conta como pouso: a marcha não é interrompida.
+        private const float ShortFallSeconds = 0.35f;
+
         [Tooltip("Animator do modelo. Se vazio, procura nos filhos.")]
         [SerializeField] private Animator animator;
 
@@ -80,6 +83,9 @@ namespace PROCEDURAL_GAME.Player
 
         [SerializeField, Range(0f, 1f)] private float standingLandPhase = 0.75f;
 
+        [Tooltip("Depois de pousar, tempo (s) para a marcha sair do parado e chegar em andar/correr: a corrida só entra de vez quando o corpo já absorveu o pouso. Acompanha o fade do pouso (LandingFade no PlayerBuilder).")]
+        [SerializeField, Min(0.01f)] private float landingGaitRamp = 0.25f;
+
         [Header("Giro parado (primeira pessoa)")]
         [Tooltip("Parado, quando o corpo gira para alcançar a câmera, a animação dá passos para o lado do giro (em vez de arrastar os pés). Fração da velocidade natural de andar usada nesses passos.")]
         [SerializeField, Range(0.2f, 1.5f)] private float turnStepFraction = 0.8f;
@@ -103,6 +109,9 @@ namespace PROCEDURAL_GAME.Player
         private bool airActive;
         private float airPhase;
         private float landedUntil;
+        private bool airFromJump;
+        private float airStart;
+        private float gaitRampEnd;
         private float jumpedAt = -10f;
         private bool standingJump;
         private bool windingUp;
@@ -168,8 +177,7 @@ namespace PROCEDURAL_GAME.Player
             // Speed só decide as transições idle <-> locomoção (com histerese): sem suavização, para sair do movimento no mesmo frame.
             // A marcha (Gait) mistura as poses: sobe suave e desce mais rápido.
             animator.SetFloat(SpeedId, animated);
-            float gait = GetGait(animated);
-            animator.SetFloat(GaitId, gait, gait > animator.GetFloat(GaitId) ? speedDamping : stopDamping, dt);
+            UpdateGait(GetGait(animated), dt);
 
             // Ritmo dos passos = velocidade da animação / velocidade natural do clipe naquela faixa (entre andar e correr interpola): sem deslizar.
             float cadence = 1f;
@@ -191,17 +199,40 @@ namespace PROCEDURAL_GAME.Player
             UpdateAir(grounded, dt);
         }
 
+        // Marcha (Gait). No ar fica em zero (uma corrida esperando pronta entrava de uma vez ao tocar o chão); ao pousar sobe em landingGaitRamp,
+        // junto com o fade do pouso. Um ressalto curto do terreno correndo não interrompe a marcha.
+        private void UpdateGait(float target, float dt)
+        {
+            float current = animator.GetFloat(GaitId);
+
+            if (airActive && IsRealAir())
+            {
+                animator.SetFloat(GaitId, 0f, stopDamping, dt);
+            }
+            else if (Time.time < gaitRampEnd && target > current)
+            {
+                animator.SetFloat(GaitId, Mathf.MoveTowards(current, target, target / landingGaitRamp * dt));
+            }
+            else
+            {
+                animator.SetFloat(GaitId, target, target > current ? speedDamping : stopDamping, dt);
+            }
+        }
+
+        private bool IsRealAir() => airFromJump || Time.time - airStart >= ShortFallSeconds;
+
         // Pontos do clipe em uso: o do pulo parado (que parte de um personagem parado) ou o do pulo andando/correndo.
         private float Leave => standingJump ? standingLeavePhase : jumpLeavePhase;
         private float Apex => standingJump ? standingApexPhase : jumpApexPhase;
         private float Land => standingJump ? standingLandPhase : jumpLandPhase;
+        private float ClipLength => standingJump && standingClipLength > 0f ? standingClipLength : jumpClipLength;
 
         /// <summary>
         /// Pose de pulo e de queda. Um único estado do Animator toca o clipe de pulo com o tempo (AirPhase, 0 a 1) ditado por AQUI, não pelo
         /// relógio: no ar o ponto do clipe segue a velocidade vertical (subindo = decolagem até o ápice; descendo = do ápice até os pés
         /// tocando), então um pulo longo (descida, queda de borda) ou curto (subida) fica sempre coerente, sem saltos de pose.
-        /// Ao tocar o chão liga "Landed" e o Animator sai NA HORA do estado de ar para o que a manete pede (idle, andar ou correr), em
-        /// fade curto, sem esperar o fim do clipe.
+        /// Ao tocar o chão liga "Landed" e o Animator começa NA HORA o fade para o que a manete pede (idle, andar ou correr). Durante o fade o
+        /// resto do clipe (os joelhos absorvendo o pouso) continua tocando, em vez de a pose ficar parada: é o que evita o "teleporte".
         /// </summary>
         private void UpdateAir(bool grounded, float dt)
         {
@@ -229,6 +260,8 @@ namespace PROCEDURAL_GAME.Player
                 if (!airActive)
                 {
                     airActive = true;
+                    airFromJump = takingOff;
+                    airStart = Time.time;
 
                     // Queda sem pulo (borda): usa o clipe/pontos do pulo andando.
                     if (!takingOff) SetStandingJump(false);
@@ -244,14 +277,18 @@ namespace PROCEDURAL_GAME.Player
             }
             else if (airActive)
             {
-                // Pousou: a pose do ar fica como está durante o fade curto para idle/andar/correr (não volta ao começo do clipe).
+                // Pousou. Só um pouso de verdade segura a marcha; o ressalto curto segue correndo.
+                if (IsRealAir()) gaitRampEnd = Time.time + landingGaitRamp;
+
                 airActive = false;
                 landedUntil = Time.time + LandedWindow;
             }
 
-            bool landed = Time.time < landedUntil;
-            animator.SetBool(LandedId, landed);
-            animator.SetFloat(AirPhaseId, airActive || landed ? airPhase : Leave);
+            // No chão o clipe segue até o fim no ritmo dele. O valor não é reposto: o estado de ar ainda aparece durante o fade do pouso.
+            if (!airActive) airPhase = Mathf.MoveTowards(airPhase, 1f, dt / ClipLength);
+
+            animator.SetBool(LandedId, Time.time < landedUntil);
+            animator.SetFloat(AirPhaseId, airPhase);
         }
 
         private void SetStandingJump(bool value)
@@ -308,6 +345,8 @@ namespace PROCEDURAL_GAME.Player
             windUpEnd = Time.time + windUpSeconds + 0.2f;
 
             airActive = true;
+            airFromJump = true;
+            airStart = Time.time;
             landedUntil = 0f;
             airPhase = 0f;
 

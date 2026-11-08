@@ -85,6 +85,10 @@ namespace PROCEDURAL_GAME.EditorTools
         // Tempo máximo (s) de agachar antes de um pulo parado sair do chão (mais que isso o toque parece atrasado).
         private const float StandingJumpMaxWindUp = 0.15f;
 
+        // Fade do pouso (s), do ar para idle/andar/correr. Começa no instante do toque, então não é atraso: é o tempo da mistura das poses.
+        // 0,08 s parecia teleporte. Se mudar, ajuste também landingGaitRamp no PlayerAnimator.
+        private const float LandingFade = 0.25f;
+
         // Velocidades aprovadas pelo usuário em teste no aparelho (m/s). Só mudam aqui se o ritmo dos passos ficar fora de
         // [MinCadence, MaxCadence] em relação à velocidade natural do clipe (medida em MeasureBodyVelocities): aí são trazidas para dentro
         // do limite, para os pés não deslizarem.
@@ -721,24 +725,22 @@ namespace PROCEDURAL_GAME.EditorTools
 
         private static void AddLandings(AnimatorState airState, AnimatorState locomotion, AnimatorState idleEntry, float stopSpeed, float moveSpeed)
         {
-            const float Fade = 0.08f;
-
             AnimatorStateTransition toIdle = airState.AddTransition(idleEntry);
             toIdle.hasExitTime = false;
-            toIdle.duration = Fade;
+            toIdle.duration = LandingFade;
             toIdle.AddCondition(AnimatorConditionMode.If, 0f, "Landed");
             toIdle.AddCondition(AnimatorConditionMode.Less, stopSpeed, "Speed");
 
             AnimatorStateTransition toMove = airState.AddTransition(locomotion);
             toMove.hasExitTime = false;
-            toMove.duration = Fade;
+            toMove.duration = LandingFade;
             toMove.AddCondition(AnimatorConditionMode.If, 0f, "Landed");
             toMove.AddCondition(AnimatorConditionMode.Greater, moveSpeed, "Speed");
 
             // Velocidade entre os dois limites (um instante de hesitação da manete): também sai, para a locomoção.
             AnimatorStateTransition any = airState.AddTransition(locomotion);
             any.hasExitTime = false;
-            any.duration = Fade;
+            any.duration = LandingFade;
             any.AddCondition(AnimatorConditionMode.If, 0f, "Landed");
         }
 
