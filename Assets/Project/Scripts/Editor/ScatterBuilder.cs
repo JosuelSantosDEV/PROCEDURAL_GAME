@@ -95,8 +95,8 @@ namespace PROCEDURAL_GAME.EditorTools
                 profile.clustering = 0.5f;
                 profile.clusterSize = 25f;
                 profile.maxSlope = 40f;
-                profile.minScale = 0.8f;
-                profile.maxScale = 1.5f;
+                profile.minScale = 0.6f;    // era 0,8–1,5: arbustos 25% menores (pedido do usuário)
+                profile.maxScale = 1.125f;
                 profile.sinkDepth = 0.05f;
                 profile.collision = ScatterCollision.None;
             });

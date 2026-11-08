@@ -53,6 +53,15 @@ namespace PROCEDURAL_GAME.CameraControl
         [Tooltip("Altura dos olhos acima do pivô do Player (a cápsula tem o pivô no centro).")]
         [SerializeField] private float eyeHeight = 0.6f;
 
+        [Tooltip("Com o corpo visível em primeira pessoa: avanço EXTRA (m) da câmera à frente dos olhos do modelo (que já são medidos no osso da cabeça). Mais = mais longe do pescoço e menos corpo à vista; 0 = exatamente nos olhos.")]
+        [SerializeField, Min(0f)] private float firstPersonForwardOffset = 0.1f;
+
+        [Tooltip("Com o corpo visível: limite ao olhar para baixo (graus). Mais que isso a câmera passaria do pescoço (aberto, sem cabeça). Com 60° e campo de visão vertical de 60° a borda de baixo da tela chega a 90°: se vê peito, braços, pernas e pés.")]
+        [SerializeField, Range(30f, 89f)] private float firstPersonMaxPitch = 55f;
+
+        [Tooltip("Com o corpo visível: plano de corte próximo (m) em primeira pessoa, para o peito e os braços perto da câmera não serem cortados.")]
+        [SerializeField, Min(0.01f)] private float firstPersonNearClip = 0.1f;
+
         [Header("Terceira pessoa")]
         [Tooltip("Altura do ponto que a câmera orbita, acima do pivô do Player.")]
         [SerializeField] private float pivotHeight = 1.2f;
@@ -73,6 +82,10 @@ namespace PROCEDURAL_GAME.CameraControl
         private PlayerInputReader input;
         private Renderer[] bodyRenderers;
         private CharacterController body;
+        private PlayerBodyVisibility bodyVisibility;
+        private PlayerMovement playerMovement;
+        private Camera playerCamera;
+        private float defaultNearClip;
         private CameraMode mode;
         private float yaw;
         private float pitch;
@@ -105,6 +118,10 @@ namespace PROCEDURAL_GAME.CameraControl
             input = target.GetComponent<PlayerInputReader>();
             bodyRenderers = target.GetComponentsInChildren<Renderer>();
             body = target.GetComponent<CharacterController>();
+            bodyVisibility = target.GetComponent<PlayerBodyVisibility>();
+            playerMovement = target.GetComponent<PlayerMovement>();
+            playerCamera = GetComponent<Camera>();
+            defaultNearClip = playerCamera.nearClipPlane;
 
             yaw = target.eulerAngles.y;
             SetMode(startMode);
@@ -144,7 +161,23 @@ namespace PROCEDURAL_GAME.CameraControl
 
             if (mode == CameraMode.FirstPerson)
             {
-                transform.SetPositionAndRotation(target.position + Vector3.up * eyeHeight, rotation);
+                Vector3 eye = target.position + Vector3.up * eyeHeight;
+
+                // Com o corpo visível a câmera fica nos olhos do modelo (medidos no osso da cabeça: acima e à frente do eixo do corpo)
+                // mais um avanço extra ajustável; a altura fixa de antes caía na base do crânio, dentro do pescoço.
+                if (ShowsBodyInFirstPerson)
+                {
+                    float forward = firstPersonForwardOffset;
+                    if (bodyVisibility.TryGetEyes(out float eyesHeight, out float eyesForward))
+                    {
+                        eye = target.position + Vector3.up * eyesHeight;
+                        forward += eyesForward;
+                    }
+
+                    eye += Quaternion.Euler(0f, yaw, 0f) * Vector3.forward * forward;
+                }
+
+                transform.SetPositionAndRotation(eye, rotation);
             }
             else
             {
@@ -173,8 +206,13 @@ namespace PROCEDURAL_GAME.CameraControl
         {
             yaw += look.x * scale;
             // Para cima = olhar para cima = pitch diminui (no Unity, X positivo inclina para baixo).
-            pitch = Mathf.Clamp(pitch - look.y * scale, GetMinPitch(), maxPitch);
+            pitch = Mathf.Clamp(pitch - look.y * scale, GetMinPitch(), GetMaxPitch());
         }
+
+        private bool ShowsBodyInFirstPerson => mode == CameraMode.FirstPerson && bodyVisibility != null && bodyVisibility.ShowBodyInFirstPerson;
+
+        // Olhar para baixo: com o corpo visível em 1ª pessoa, limitado para não passar do pescoço (sem cabeça).
+        private float GetMaxPitch() => ShowsBodyInFirstPerson ? Mathf.Min(maxPitch, firstPersonMaxPitch) : maxPitch;
 
         private float GetMinPitch() => mode == CameraMode.ThirdPerson ? Mathf.Max(minPitch, thirdPersonMinPitch) : minPitch;
 
@@ -230,9 +268,21 @@ namespace PROCEDURAL_GAME.CameraControl
             mode = newMode;
 
             // Ao voltar para a terceira pessoa, o ângulo pode estar além do limite dela.
-            pitch = Mathf.Clamp(pitch, GetMinPitch(), maxPitch);
+            pitch = Mathf.Clamp(pitch, GetMinPitch(), GetMaxPitch());
 
-            // Na primeira pessoa a câmera fica dentro da cápsula: escondemos o corpo,
+            // Primeira pessoa: o corpo acompanha a câmera e o Player anda de frente, de ré e de lado. Terceira: o corpo vira para o movimento.
+            if (playerMovement != null) playerMovement.FaceCamera = mode == CameraMode.FirstPerson;
+
+            playerCamera.nearClipPlane = ShowsBodyInFirstPerson ? Mathf.Min(defaultNearClip, firstPersonNearClip) : defaultNearClip;
+
+            // Com modelo de personagem: só a cabeça some (o resto do corpo continua visível e com sombra).
+            if (bodyVisibility != null)
+            {
+                bodyVisibility.SetFirstPerson(mode == CameraMode.FirstPerson);
+                return;
+            }
+
+            // Sem modelo (cápsula): na primeira pessoa a câmera fica dentro dela: escondemos o corpo,
             // mas mantemos a sombra (ShadowsOnly) para o jogador ainda "existir" no mundo.
             ShadowCastingMode bodyMode = mode == CameraMode.FirstPerson ? ShadowCastingMode.ShadowsOnly : ShadowCastingMode.On;
             foreach (Renderer bodyRenderer in bodyRenderers)

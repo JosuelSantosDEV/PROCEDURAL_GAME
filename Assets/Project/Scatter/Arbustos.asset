@@ -164,8 +164,8 @@ MonoBehaviour:
   minHeight: 0
   maxHeight: 1
   lakeBand: 2
-  minScale: 0.8
-  maxScale: 1.5
+  minScale: 0.6
+  maxScale: 1.125
   alignToSurface: 0
   sinkDepth: 0.05
   castShadowsFromLevel: 0
