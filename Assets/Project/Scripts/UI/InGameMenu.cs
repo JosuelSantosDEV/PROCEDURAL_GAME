@@ -1,3 +1,4 @@
+using PROCEDURAL_GAME.Core;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -12,6 +13,8 @@ namespace PROCEDURAL_GAME.UI
     /// </summary>
     public class InGameMenu : MonoBehaviour
     {
+        private const float ControlRowLabelWidth = 340f;
+
         [Tooltip("Nome da cena do menu inicial (precisa estar em File > Build Settings).")]
         [SerializeField] private string menuSceneName = "MainMenu";
 
@@ -49,12 +52,16 @@ namespace PROCEDURAL_GAME.UI
             pausePanel = dim.gameObject;
 
             Image box = UiKit.CreateImage(dim.rectTransform, "Box", UiKit.PanelColor);
-            UiKit.Anchor(box.rectTransform, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(800f, 640f));
+            UiKit.Anchor(box.rectTransform, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1200f, 860f));
             UiKit.AddVerticalLayout(box.gameObject, 36f, 60, TextAnchor.UpperCenter);
 
             Text title = UiKit.CreateText(box.rectTransform, "Title", "PAUSADO", 72, TextAnchor.MiddleCenter, UiKit.TextColor);
             title.fontStyle = FontStyle.Bold;
             UiKit.SetLayout(title.gameObject, preferredHeight: 110f);
+
+            // Aqui dá para ajustar e testar em seguida, sem sair da partida.
+            UiKit.CreateSliderRow(box.rectTransform, "Sensibilidade", ControlRowLabelWidth, ControlSettings.MaxLookSteps, ControlSettings.GetLookSteps(), ControlSettings.FormatLookSteps, ControlSettings.SetLookSteps);
+            UiKit.CreateSliderRow(box.rectTransform, "Transparência", ControlRowLabelWidth, ControlSettings.MaxTransparencySteps, ControlSettings.GetTransparencySteps(), ControlSettings.FormatTransparencySteps, ControlSettings.SetTransparencySteps);
 
             Button resume = UiKit.CreateButton(box.rectTransform, "ResumeButton", "CONTINUAR", new Vector2(0f, 130f), 50, () => SetPaused(false));
             UiKit.SetLayout(resume.gameObject, preferredHeight: 130f);
@@ -69,11 +76,14 @@ namespace PROCEDURAL_GAME.UI
         {
             pausePanel.SetActive(paused);
             Time.timeScale = paused ? 0f : 1f;
+
+            if (!paused) ControlSettings.Save();
         }
 
         private void GoToMainMenu()
         {
             Time.timeScale = 1f;
+            ControlSettings.Save();
             SceneManager.LoadScene(menuSceneName);
         }
     }

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using PROCEDURAL_GAME.CameraControl;
 using PROCEDURAL_GAME.Player;
+using PROCEDURAL_GAME.UI;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
@@ -27,8 +28,16 @@ namespace PROCEDURAL_GAME.EditorTools
         // Correr para frente: a do projeto antigo (Mixamo "Running"), a pedido do usuário. As outras 7 direções da corrida continuam do pacote Burak.
         private const string RunForwardPath = Root + "/Animations/Running.fbx";
 
-        // Pulo PARADO: clipe que parte de um personagem parado (Mixamo "Jumping", baixado pelo usuário). Pulando andando/correndo vale o Jump.fbx.
-        private const string StandingJumpPath = Root + "/Animations/Jumping.fbx";
+        // Pulo PARADO: clipe que parte de um personagem parado (Mixamo, baixado pelo usuário). Pulando andando/correndo vale o Jump.fbx.
+        private const string StandingJumpPath = Root + "/Animations/Jumping_2.fbx";
+
+        // Sequência de ataque: gancho, chute (projeto antigo) e direto. Morte: projeto antigo. Gancho, direto, agachar e levantar: Mixamo, baixados pelo usuário.
+        private const string HookPath = Root + "/Animations/Hook.fbx";
+        private const string KickPath = Root + "/Animations/Chute.fbx";
+        private const string CrossPath = Root + "/Animations/Cross Punch.fbx";
+        private const string DeathPath = Root + "/Animations/Morte.fbx";
+        private const string CrouchDownPath = Root + "/Animations/Standing To Crouched.fbx";
+        private const string CrouchUpPath = Root + "/Animations/Crouched To Standing.fbx";
 
         // Pacote Burak Uzun (Asset Store, humanoide, in place): usado no lugar, sem copiar. Os 3 primeiros idles entram junto com o Idle do Player.
         private const string BurakIdlePath = "Assets/Burak Uzun/BasicCharacterAnimations/Character Animations/Idles/Idle_InPlace.fbx";
@@ -69,8 +78,9 @@ namespace PROCEDURAL_GAME.EditorTools
         private const float BaseSkinWidth = 0.03f;
         private const float BaseEyeHeight = 0.6f;
         private const float BasePivotHeight = 1.2f;
-        private const float BaseThirdPersonDistance = 4f;
-        private const float BaseCameraCollisionRadius = 0.25f;
+        // 6 m e 0,35 m na escala 2x: a 8 m e 0,5 m, na floresta, quase sempre havia um tronco na frente.
+        private const float BaseThirdPersonDistance = 3f;
+        private const float BaseCameraCollisionRadius = 0.175f;
         // Limite de olhar para baixo em 1ª pessoa com corpo visível (graus). Era 60; o usuário pediu 5° a menos.
         private const float FirstPersonMaxPitch = 55f;
 
@@ -83,7 +93,20 @@ namespace PROCEDURAL_GAME.EditorTools
         private const float BaseGroundedStick = -2f;
 
         // Tempo máximo (s) de agachar antes de um pulo parado sair do chão (mais que isso o toque parece atrasado).
-        private const float StandingJumpMaxWindUp = 0.15f;
+        private const float StandingJumpMaxWindUp = 1f;
+
+        // Duração de cada golpe na tela (s): a animação é acelerada ou freada para caber aqui, sem passar destes limites de velocidade.
+        private const float HookTargetSeconds = 0.9f;
+        private const float KickTargetSeconds = 1.1f;
+        private const float CrossTargetSeconds = 0.9f;
+        private const float MinAttackSpeed = 0.75f;
+        private const float MaxAttackSpeed = 2f;
+
+        // Fade entre um golpe e o seguinte (s). Igual ao AttackChainFade do PlayerActions.
+        private const float AttackChainFade = 0.15f;
+
+        // Fade de entrada do pulo parado (s): a preparação começa suave a partir do idle.
+        private const float StandingJumpEntryFade = 0.15f;
 
         // Fade do pouso (s), do ar para idle/andar/correr. Começa no instante do toque, então não é atraso: é o tempo da mistura das poses.
         // 0,08 s parecia teleporte. Se mudar, ajuste também landingGaitRamp no PlayerAnimator.
@@ -146,17 +169,29 @@ namespace PROCEDURAL_GAME.EditorTools
             // Pulo parado (opcional: sem o arquivo, o pulo parado usa o clipe do pulo andando).
             AnimationClip standingJump = EnsureMixamoClip(StandingJumpPath, false);
             JumpPhases standingPhases = standingJump != null ? MeasureJumpPhases(modelAsset, standingJump) : default;
-            if (standingJump == null) Debug.LogWarning("Pulo parado (Jumping.fbx) indisponível: o pulo parado usará o clipe do pulo andando.");
+            if (standingJump == null) Debug.LogWarning("Pulo parado (Jumping_2.fbx) indisponível: o pulo parado usará o clipe do pulo andando.");
 
-            // Preparação do pulo parado = o tempo do agachar do clipe (até os pés saírem do chão), limitado para não atrasar o toque.
+            // Preparação do pulo parado = o tempo real do agachar do clipe (até os pés saírem do chão): o corpo só sai do chão quando ela termina.
             float standingWindUp = 0f;
             if (standingJump != null)
             {
                 float crouchTime = standingPhases.leave * standingPhases.clipLength;
                 standingWindUp = crouchTime < 0.05f ? 0f : Mathf.Min(StandingJumpMaxWindUp, crouchTime);
+                Debug.Log($"Pulo parado: {standingWindUp:0.00} s de preparação antes de sair do chão.");
             }
 
-            AnimatorController controller = EnsureController(walkSpeed, sprintSpeed, idles, walkClips, runClips, walkScales, runScales, jumpPhases, standingJump, standingPhases);
+            ActionClips actionClips = new ActionClips
+            {
+                hook = EnsureMixamoClip(HookPath, false),
+                kick = EnsureMixamoClip(KickPath, false),
+                cross = EnsureMixamoClip(CrossPath, false),
+                death = EnsureMixamoClip(DeathPath, false),
+                crouchDown = EnsureMixamoClip(CrouchDownPath, false),
+                crouchUp = EnsureMixamoClip(CrouchUpPath, false)
+            };
+            if (actionClips.hook == null || actionClips.kick == null || actionClips.cross == null || actionClips.death == null || actionClips.crouchDown == null || actionClips.crouchUp == null) return;
+
+            AnimatorController controller = EnsureController(walkSpeed, sprintSpeed, idles, walkClips, runClips, walkScales, runScales, jumpPhases, standingJump, standingPhases, actionClips);
             if (controller == null) return;
 
             Transform player = movement.transform;
@@ -208,6 +243,22 @@ namespace PROCEDURAL_GAME.EditorTools
             animatorSo.FindProperty("walkNaturalSpeed").floatValue = walkNatural;
             animatorSo.FindProperty("runNaturalSpeed").floatValue = runNatural;
             animatorSo.ApplyModifiedPropertiesWithoutUndo();
+
+            // Sobrevivência: vida, energia, sede e fome (a tela é montada por código pelo SurvivalHud).
+            GetOrAdd<PlayerStats>(player);
+
+            PlayerActions playerActions = GetOrAdd<PlayerActions>(player);
+            SerializedObject actionsSo = new SerializedObject(playerActions);
+            actionsSo.FindProperty("animator").objectReferenceValue = animator;
+            actionsSo.FindProperty("hookSeconds").floatValue = actionClips.hook.length / AttackSpeed(actionClips.hook, HookTargetSeconds);
+            actionsSo.FindProperty("kickSeconds").floatValue = actionClips.kick.length / AttackSpeed(actionClips.kick, KickTargetSeconds);
+            actionsSo.FindProperty("crossSeconds").floatValue = actionClips.cross.length / AttackSpeed(actionClips.cross, CrossTargetSeconds);
+            actionsSo.FindProperty("deathSeconds").floatValue = actionClips.death.length;
+            actionsSo.FindProperty("crouchDownSeconds").floatValue = actionClips.crouchDown.length;
+            actionsSo.FindProperty("crouchUpSeconds").floatValue = actionClips.crouchUp.length;
+            actionsSo.ApplyModifiedPropertiesWithoutUndo();
+
+            GetOrAdd<SurvivalHud>(player);
 
             PlayerBodyVisibility visibility = GetOrAdd<PlayerBodyVisibility>(player);
             SerializedObject visibilitySo = new SerializedObject(visibility);
@@ -572,7 +623,7 @@ namespace PROCEDURAL_GAME.EditorTools
             return clips;
         }
 
-        private static AnimatorController EnsureController(float walkSpeed, float sprintSpeed, List<AnimationClip> idles, AnimationClip[] walkClips, AnimationClip[] runClips, float[] walkScales, float[] runScales, JumpPhases jumpPhases, AnimationClip standingJump, JumpPhases standingPhases)
+        private static AnimatorController EnsureController(float walkSpeed, float sprintSpeed, List<AnimationClip> idles, AnimationClip[] walkClips, AnimationClip[] runClips, float[] walkScales, float[] runScales, JumpPhases jumpPhases, AnimationClip standingJump, JumpPhases standingPhases, ActionClips actionClips)
         {
             AnimationClip idle = idles[0];
             AnimationClip jump = FindClip(JumpPath);
@@ -599,6 +650,12 @@ namespace PROCEDURAL_GAME.EditorTools
             controller.AddParameter("StandingJump", AnimatorControllerParameterType.Bool);
             // Pousou (o PlayerAnimator liga ao tocar o chão depois de um pulo/queda e desliga ao voltar ao ar): o estado de ar sai na hora.
             controller.AddParameter("Landed", AnimatorControllerParameterType.Bool);
+            // Ações que prendem o corpo (PlayerActions).
+            controller.AddParameter("Hook", AnimatorControllerParameterType.Trigger);
+            controller.AddParameter("Kick", AnimatorControllerParameterType.Trigger);
+            controller.AddParameter("Cross", AnimatorControllerParameterType.Trigger);
+            controller.AddParameter("Collect", AnimatorControllerParameterType.Trigger);
+            controller.AddParameter("Die", AnimatorControllerParameterType.Trigger);
             // Ponto (0..1) do clipe de pulo que o estado Air mostra; o PlayerAnimator o calcula pela velocidade vertical e, ao pousar, o leva até o fim.
             controller.AddParameter(new AnimatorControllerParameter { name = "AirPhase", type = AnimatorControllerParameterType.Float, defaultFloat = 0.3f });
 
@@ -639,16 +696,16 @@ namespace PROCEDURAL_GAME.EditorTools
             // Locomoção -> ar: gatilho de pulo (andando/correndo; ou parado se não há clipe de pulo parado) ou sem chão (queda de borda, que usa o do pulo andando).
             AddJumpTransitions(locomotion, air, airStanding);
 
+            // Ações: antes da saída para o idle (a primeira transição que vale é a usada, e a ação zera o Speed no mesmo frame).
+            ActionStates actionStates = BuildActionStates(machine, actionClips);
+            AddActionTriggers(locomotion, actionStates);
+
             AnimatorStateTransition toFall = locomotion.AddTransition(air);
             toFall.hasExitTime = false;
             toFall.duration = 0.1f;
             toFall.AddCondition(AnimatorConditionMode.IfNot, 0f, "Grounded");
 
-            // Pular de novo logo ao pousar (ainda na aterrissagem): reentra no estado do pulo pedido.
-            AddJumpTransitions(air, air, airStanding, true);
-            if (airStanding != null) AddJumpTransitions(airStanding, air, airStanding, true);
-
-            BuildIdleStates(machine, locomotion, air, airStanding, idles);
+            BuildIdleStates(machine, locomotion, air, airStanding, idles, actionStates, actionClips);
 
             // IK dos pés (PlayerFootIK): o callback OnAnimatorIK só roda com "IK Pass" ligado na camada.
             AnimatorControllerLayer[] layers = controller.layers;
@@ -663,7 +720,7 @@ namespace PROCEDURAL_GAME.EditorTools
         // Idle: dois estados. Idle0 (o antigo) repete IdleLoops vezes e passa ao Idle1 (Bored, uma vez só), que volta ao Idle0, e assim por diante.
         // Tudo é nativo do Animator (tempo de estado com exit time), sem script e SEM memória: toda entrada em idle vem pelo Idle0, e o tempo
         // do estado recomeça do zero. Mexer-se, pular ou cair sai de qualquer um dos dois. Também liga os estados de ar (pulo/queda).
-        private static void BuildIdleStates(AnimatorStateMachine machine, AnimatorState locomotion, AnimatorState air, AnimatorState airStanding, List<AnimationClip> idles)
+        private static void BuildIdleStates(AnimatorStateMachine machine, AnimatorState locomotion, AnimatorState air, AnimatorState airStanding, List<AnimationClip> idles, ActionStates actionStates, ActionClips actionClips)
         {
             const float StopSpeed = 0.1f;
             const float MoveSpeed = 0.15f;
@@ -677,6 +734,8 @@ namespace PROCEDURAL_GAME.EditorTools
 
             for (int i = 0; i < states.Length; i++)
             {
+                AddActionTriggers(states[i], actionStates);
+
                 // Saídas por movimento, pulo e queda primeiro: têm prioridade sobre o ciclo de idle.
                 AnimatorStateTransition move = states[i].AddTransition(locomotion);
                 move.hasExitTime = false;
@@ -701,6 +760,7 @@ namespace PROCEDURAL_GAME.EditorTools
                 toBored.exitTime = Mathf.Max(IdleLoops - 1f, IdleLoops - IdleFade / length0);
                 toBored.hasFixedDuration = true;
                 toBored.duration = IdleFade;
+                toBored.interruptionSource = TransitionInterruptionSource.Source; // pular ou andar no meio do fade não espera ele terminar
 
                 float length1 = Mathf.Max(0.1f, idles[1].length);
                 AnimatorStateTransition backToIdle = states[1].AddTransition(states[0]);
@@ -708,12 +768,14 @@ namespace PROCEDURAL_GAME.EditorTools
                 backToIdle.exitTime = Mathf.Clamp(1f - IdleFade / length1, 0.5f, 1f);
                 backToIdle.hasFixedDuration = true;
                 backToIdle.duration = IdleFade;
+                backToIdle.interruptionSource = TransitionInterruptionSource.Source;
             }
 
             // Parar (locomoção -> idle): sempre pelo Idle0.
             AnimatorStateTransition stop = locomotion.AddTransition(states[0]);
             stop.hasExitTime = false;
             stop.duration = 0.12f; // curto: ao soltar a manete o idle entra rápido
+            stop.interruptionSource = TransitionInterruptionSource.Source;
             stop.AddCondition(AnimatorConditionMode.Less, StopSpeed, "Speed");
             stop.AddCondition(AnimatorConditionMode.If, 0f, "Grounded");
 
@@ -721,6 +783,108 @@ namespace PROCEDURAL_GAME.EditorTools
             // correndo = correr (a mistura andar/correr já está na marcha e na direção certas, porque o PlayerAnimator as atualiza no ar).
             AddLandings(air, locomotion, states[0], StopSpeed, MoveSpeed);
             if (airStanding != null) AddLandings(airStanding, locomotion, states[0], StopSpeed, MoveSpeed);
+
+            // Fim das ações: volta ao idle (se a manete estiver inclinada, o Idle0 sai logo para a locomoção).
+            AddExit(actionStates.hook, states[0], actionClips.hook, true);
+            AddExit(actionStates.kick, states[0], actionClips.kick, true);
+            AddExit(actionStates.cross, states[0], actionClips.cross, true);
+            AddExit(actionStates.crouchUp, states[0], actionClips.crouchUp);
+        }
+
+        private struct ActionClips
+        {
+            public AnimationClip hook;
+            public AnimationClip kick;
+            public AnimationClip cross;
+            public AnimationClip death;
+            public AnimationClip crouchDown;
+            public AnimationClip crouchUp;
+        }
+
+        private struct ActionStates
+        {
+            public AnimatorState hook;
+            public AnimatorState kick;
+            public AnimatorState cross;
+            public AnimatorState crouchDown;
+            public AnimatorState crouchUp;
+        }
+
+        private static ActionStates BuildActionStates(AnimatorStateMachine machine, ActionClips clips)
+        {
+            ActionStates states = new ActionStates
+            {
+                hook = AddClipState(machine, "Hook", clips.hook),
+                kick = AddClipState(machine, "Kick", clips.kick),
+                cross = AddClipState(machine, "Cross", clips.cross),
+                crouchDown = AddClipState(machine, "CrouchDown", clips.crouchDown),
+                crouchUp = AddClipState(machine, "CrouchUp", clips.crouchUp)
+            };
+
+            states.hook.speed = AttackSpeed(clips.hook, HookTargetSeconds);
+            states.kick.speed = AttackSpeed(clips.kick, KickTargetSeconds);
+            states.cross.speed = AttackSpeed(clips.cross, CrossTargetSeconds);
+            Debug.Log($"Golpes: gancho {clips.hook.length:0.00} s x{states.hook.speed:0.00}, chute {clips.kick.length:0.00} s x{states.kick.speed:0.00}, direto {clips.cross.length:0.00} s x{states.cross.speed:0.00}.");
+
+            // Encadear golpes: de um golpe direto ao seguinte, sem passar pelo idle.
+            AddTrigger(states.hook, states.kick, "Kick", AttackChainFade);
+            AddTrigger(states.hook, states.cross, "Cross", AttackChainFade);
+            AddTrigger(states.kick, states.cross, "Cross", AttackChainFade);
+            AddTrigger(states.kick, states.hook, "Hook", AttackChainFade);
+            AddTrigger(states.cross, states.hook, "Hook", AttackChainFade);
+            AddTrigger(states.cross, states.kick, "Kick", AttackChainFade);
+
+            AddExit(states.crouchDown, states.crouchUp, clips.crouchDown);
+
+            // Morrer vale de qualquer estado e não tem saída: a pose final fica até a tela de morte.
+            AnimatorState death = AddClipState(machine, "Death", clips.death);
+            AnimatorStateTransition die = machine.AddAnyStateTransition(death);
+            die.canTransitionToSelf = false;
+            die.hasExitTime = false;
+            die.duration = 0.15f;
+            die.AddCondition(AnimatorConditionMode.If, 0f, "Die");
+
+            return states;
+        }
+
+        private static AnimatorState AddClipState(AnimatorStateMachine machine, string name, AnimationClip clip)
+        {
+            AnimatorState state = machine.AddState(name);
+            state.motion = clip;
+            return state;
+        }
+
+        private static void AddActionTriggers(AnimatorState from, ActionStates states)
+        {
+            AddTrigger(from, states.hook, "Hook");
+            AddTrigger(from, states.kick, "Kick");
+            AddTrigger(from, states.cross, "Cross");
+            AddTrigger(from, states.crouchDown, "Collect");
+        }
+
+        private static float AttackSpeed(AnimationClip clip, float targetSeconds) => Mathf.Clamp(clip.length / targetSeconds, MinAttackSpeed, MaxAttackSpeed);
+
+        private static void AddTrigger(AnimatorState from, AnimatorState to, string trigger, float duration = 0.1f)
+        {
+            AnimatorStateTransition transition = from.AddTransition(to);
+            transition.hasExitTime = false;
+            transition.hasFixedDuration = true;
+            transition.duration = duration;
+            transition.AddCondition(AnimatorConditionMode.If, 0f, trigger);
+        }
+
+        // Sai com um fade que termina junto com o clipe.
+        // interruptible: o próximo golpe pode entrar no meio deste fade.
+        private static void AddExit(AnimatorState from, AnimatorState to, AnimationClip clip, bool interruptible = false)
+        {
+            const float Fade = 0.15f;
+
+            AnimatorStateTransition exit = from.AddTransition(to);
+            exit.hasExitTime = true;
+            exit.exitTime = Mathf.Clamp(1f - Fade / Mathf.Max(0.1f, clip.length / Mathf.Max(0.01f, from.speed)), 0.5f, 1f);
+            exit.hasFixedDuration = true;
+            exit.duration = Fade;
+            if (interruptible) exit.interruptionSource = TransitionInterruptionSource.Source;
         }
 
         private static void AddLandings(AnimatorState airState, AnimatorState locomotion, AnimatorState idleEntry, float stopSpeed, float moveSpeed)
@@ -745,11 +909,10 @@ namespace PROCEDURAL_GAME.EditorTools
         }
 
         // Transições de "pulo pedido" a partir de um estado: com clipe de pulo parado, o gatilho vai para o estado certo conforme StandingJump
-        // (parado = AirStanding, andando/correndo = Air); sem ele, sempre Air. reentry = vindo de um estado de ar (pode reentrar em si mesmo).
-        private static void AddJumpTransitions(AnimatorState from, AnimatorState air, AnimatorState airStanding, bool reentry = false)
+        // (parado = AirStanding, andando/correndo = Air); sem ele, sempre Air.
+        private static void AddJumpTransitions(AnimatorState from, AnimatorState air, AnimatorState airStanding)
         {
             AnimatorStateTransition toMoving = from.AddTransition(air);
-            toMoving.canTransitionToSelf = reentry;
             toMoving.hasExitTime = false;
             toMoving.duration = 0.05f;
             toMoving.AddCondition(AnimatorConditionMode.If, 0f, "Jump");
@@ -758,9 +921,9 @@ namespace PROCEDURAL_GAME.EditorTools
             if (airStanding == null) return;
 
             AnimatorStateTransition toStanding = from.AddTransition(airStanding);
-            toStanding.canTransitionToSelf = reentry;
             toStanding.hasExitTime = false;
-            toStanding.duration = 0.05f;
+            toStanding.hasFixedDuration = true;
+            toStanding.duration = StandingJumpEntryFade;
             toStanding.AddCondition(AnimatorConditionMode.If, 0f, "Jump");
             toStanding.AddCondition(AnimatorConditionMode.If, 0f, "StandingJump");
         }

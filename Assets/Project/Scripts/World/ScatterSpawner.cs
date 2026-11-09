@@ -20,6 +20,9 @@ namespace PROCEDURAL_GAME.World
         private readonly List<ScatterInstance> allInstances = new List<ScatterInstance>();
         private int shadowLevel = Core.PerformanceSettings.EffectiveShadowLevel;
 
+        /// <summary>Coletáveis ativos e já coletados nesta partida.</summary>
+        public PickupRegistry Pickups { get; } = new PickupRegistry();
+
         // Reaproveitada a cada chunk para não gerar lixo de memória.
         private readonly List<ScatterPlacement> placements = new List<ScatterPlacement>();
 
@@ -47,14 +50,19 @@ namespace PROCEDURAL_GAME.World
 
                 generator.Generate(coord, profile, placements);
                 ScatterProfile.Variant[] variants = profile.Variants;
+                bool isPickup = profile.pickupKind != PickupKind.None;
 
                 foreach (ScatterPlacement placement in placements)
                 {
                     GameObject prefab = variants[placement.VariantIndex].prefab;
                     if (prefab == null) continue;
 
+                    // O sorteio é sempre o mesmo: o que já foi pego não pode nascer de novo.
+                    if (isPickup && Pickups.IsCollected(placement.Position)) continue;
+
                     ScatterInstance instance = Acquire(profile, prefab);
                     instance.Place(placement.Position, placement.Rotation, placement.Scale, placement.ColliderScale);
+                    if (isPickup) Pickups.Add(instance, placement.Position, profile.pickupKind);
                     into.Add(instance);
                 }
             }
@@ -65,6 +73,8 @@ namespace PROCEDURAL_GAME.World
         {
             foreach (ScatterInstance instance in instances)
             {
+                if (instance.Profile.pickupKind != PickupKind.None) Pickups.Remove(instance);
+
                 instance.Deactivate();
                 pools[(instance.Profile, instance.Prefab)].Push(instance);
             }

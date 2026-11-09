@@ -1,3 +1,4 @@
+using PROCEDURAL_GAME.Core;
 using PROCEDURAL_GAME.Player;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -71,22 +72,40 @@ namespace PROCEDURAL_GAME.CameraControl
         [Tooltip("Limite ao olhar para cima na terceira pessoa (valor negativo). Mais baixo que o geral: olhar muito para cima leva a câmera para baixo do chão.")]
         [SerializeField, Range(-89f, 0f)] private float thirdPersonMinPitch = -30f;
 
-        [Tooltip("Raio da esfera usada para detectar paredes entre o Player e a câmera.")]
+        [Tooltip("Raio da esfera usada para detectar paredes entre o Player e a câmera. Precisa cobrir os cantos do plano de corte próximo, senão a câmera enxerga através das coisas.")]
         [SerializeField, Min(0.05f)] private float collisionRadius = 0.25f;
+
+        [Tooltip("Plano de corte próximo em terceira pessoa (m). Menor permite um raio de colisão menor.")]
+        [SerializeField, Min(0.01f)] private float thirdPersonNearClip = 0.2f;
+
+        [Tooltip("Tempo (s) que algo precisa ficar entre o Player e a câmera para ela se aproximar. Sem isso, cada tronco que cruza a linha de visão faria a câmera saltar. Se a própria câmera encostar em algo, ela se aproxima na hora.")]
+        [SerializeField, Min(0f)] private float occlusionDelay = 0.12f;
+
+        [Tooltip("Tempo (s) da aproximação quando há algo no caminho. Curto: a câmera não pode atravessar nada.")]
+        [SerializeField, Min(0.01f)] private float pullInTime = 0.05f;
+
+        [Tooltip("Tempo (s) da volta à distância normal quando o caminho libera. Longo: é o que deixa de parecer que a câmera bate nas coisas.")]
+        [SerializeField, Min(0.01f)] private float returnTime = 0.35f;
 
         [Tooltip("Camadas que empurram a câmera para perto do Player.")]
         [SerializeField] private LayerMask collisionMask = ~0;
 
         private readonly RaycastHit[] hitBuffer = new RaycastHit[HitBufferSize];
+        private readonly Collider[] overlapBuffer = new Collider[HitBufferSize];
 
         private PlayerInputReader input;
         private Renderer[] bodyRenderers;
         private CharacterController body;
         private PlayerBodyVisibility bodyVisibility;
         private PlayerMovement playerMovement;
+        private PlayerStats playerStats;
+        private bool playerDead;
         private Camera playerCamera;
         private float defaultNearClip;
         private CameraMode mode;
+        private float currentDistance;
+        private float distanceVelocity;
+        private float occludedTime;
         private float yaw;
         private float pitch;
 
@@ -120,6 +139,7 @@ namespace PROCEDURAL_GAME.CameraControl
             body = target.GetComponent<CharacterController>();
             bodyVisibility = target.GetComponent<PlayerBodyVisibility>();
             playerMovement = target.GetComponent<PlayerMovement>();
+            playerStats = target.GetComponent<PlayerStats>();
             playerCamera = GetComponent<Camera>();
             defaultNearClip = playerCamera.nearClipPlane;
 
@@ -130,16 +150,25 @@ namespace PROCEDURAL_GAME.CameraControl
         private void OnEnable()
         {
             if (lockCursor) SetCursorLocked(true);
+            if (playerStats != null) playerStats.Died += OnPlayerDied;
         }
 
         private void OnDisable()
         {
             if (lockCursor) SetCursorLocked(false);
+            if (playerStats != null) playerStats.Died -= OnPlayerDied;
+        }
+
+        // Em primeira pessoa a câmera ficaria no ar enquanto o corpo cai, sem a cabeça: a morte é vista de fora.
+        private void OnPlayerDied()
+        {
+            playerDead = true;
+            SetMode(CameraMode.ThirdPerson);
         }
 
         private void Update()
         {
-            if (input.ToggleCameraPressed)
+            if (!playerDead && input.ToggleCameraPressed)
             {
                 SetMode(mode == CameraMode.FirstPerson ? CameraMode.ThirdPerson : CameraMode.FirstPerson);
             }
@@ -183,7 +212,7 @@ namespace PROCEDURAL_GAME.CameraControl
             {
                 Vector3 pivot = target.position + Vector3.up * pivotHeight;
                 Vector3 backwards = rotation * Vector3.back;
-                float distance = GetThirdPersonDistance(pivot, backwards);
+                float distance = UpdateThirdPersonDistance(pivot, backwards);
                 Vector3 position = KeepOutsideBody(pivot + backwards * distance, rotation);
                 transform.SetPositionAndRotation(position, rotation);
             }
@@ -199,7 +228,7 @@ namespace PROCEDURAL_GAME.CameraControl
                 Rotate(look, scale);
             }
 
-            Rotate(input.TouchLook, touchSensitivity);
+            Rotate(input.TouchLook, touchSensitivity * ControlSettings.LookSensitivity);
         }
 
         private void Rotate(Vector2 look, float scale)
@@ -215,6 +244,46 @@ namespace PROCEDURAL_GAME.CameraControl
         private float GetMaxPitch() => ShowsBodyInFirstPerson ? Mathf.Min(maxPitch, firstPersonMaxPitch) : maxPitch;
 
         private float GetMinPitch() => mode == CameraMode.ThirdPerson ? Mathf.Max(minPitch, thirdPersonMinPitch) : minPitch;
+
+        /// <summary>
+        /// Distância suavizada da câmera. Com algo no caminho, aproxima rápido, mas só depois de <see cref="occlusionDelay"/> (um tronco que só
+        /// cruza a linha de visão não a faz saltar), ou na hora se a própria câmera estiver encostando em algo. Com o caminho livre, volta devagar.
+        /// </summary>
+        private float UpdateThirdPersonDistance(Vector3 pivot, Vector3 direction)
+        {
+            // Com o jogo pausado, SmoothDamp divide por zero e a velocidade vira NaN.
+            float dt = Time.deltaTime;
+            if (dt <= 0f) return currentDistance;
+
+            float clear = GetThirdPersonDistance(pivot, direction);
+
+            if (clear >= currentDistance)
+            {
+                occludedTime = 0f;
+                currentDistance = Mathf.SmoothDamp(currentDistance, clear, ref distanceVelocity, returnTime, Mathf.Infinity, dt);
+                return currentDistance;
+            }
+
+            occludedTime += dt;
+            if (occludedTime >= occlusionDelay || IsTouchingSomething(pivot + direction * currentDistance))
+            {
+                currentDistance = Mathf.SmoothDamp(currentDistance, clear, ref distanceVelocity, pullInTime, Mathf.Infinity, dt);
+            }
+
+            return currentDistance;
+        }
+
+        private bool IsTouchingSomething(Vector3 position)
+        {
+            int count = Physics.OverlapSphereNonAlloc(position, collisionRadius, overlapBuffer, collisionMask, QueryTriggerInteraction.Ignore);
+
+            for (int i = 0; i < count; i++)
+            {
+                if (!overlapBuffer[i].transform.IsChildOf(target)) return true;
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// Lança uma esfera do pivô para trás; se bater em algo (parede, chão), aproxima a câmera
@@ -273,7 +342,13 @@ namespace PROCEDURAL_GAME.CameraControl
             // Primeira pessoa: o corpo acompanha a câmera e o Player anda de frente, de ré e de lado. Terceira: o corpo vira para o movimento.
             if (playerMovement != null) playerMovement.FaceCamera = mode == CameraMode.FirstPerson;
 
-            playerCamera.nearClipPlane = ShowsBodyInFirstPerson ? Mathf.Min(defaultNearClip, firstPersonNearClip) : defaultNearClip;
+            float nearClip = ShowsBodyInFirstPerson ? firstPersonNearClip : (mode == CameraMode.ThirdPerson ? thirdPersonNearClip : defaultNearClip);
+            playerCamera.nearClipPlane = Mathf.Min(defaultNearClip, nearClip);
+
+            // Ao entrar em terceira pessoa a câmera nasce na distância cheia; havendo algo no caminho, aproxima já.
+            currentDistance = thirdPersonDistance;
+            distanceVelocity = 0f;
+            occludedTime = occlusionDelay;
 
             // Com modelo de personagem: só a cabeça some (o resto do corpo continua visível e com sombra).
             if (bodyVisibility != null)

@@ -57,8 +57,17 @@ namespace PROCEDURAL_GAME.Player
         /// <summary>True apenas no frame em que o botão de pulo foi apertado.</summary>
         public bool JumpPressed => jumpAction.WasPressedThisFrame() || (mobileControls != null && mobileControls.JumpPressed);
 
-        /// <summary>True enquanto o botão de correr estiver segurado.</summary>
-        public bool SprintHeld => sprintAction.IsPressed() || (mobileControls != null && mobileControls.SprintHeld);
+        /// <summary>True apenas no frame em que o botão de ataque foi apertado (só na tela, por enquanto).</summary>
+        public bool AttackPressed => mobileControls != null && mobileControls.AttackPressed;
+
+        /// <summary>Correr: teclado/gamepad enquanto a tecla estiver segurada; na tela, liga/desliga pelo botão.</summary>
+        public bool Sprinting => sprintAction.IsPressed() || (mobileControls != null && mobileControls.SprintOn);
+
+        /// <summary>Desliga a corrida do botão de tela (a energia acabou). A corrida não religa sozinha: o jogador decide tocar de novo.</summary>
+        public void CancelSprint()
+        {
+            if (mobileControls != null) mobileControls.SetSprint(false);
+        }
 
         private void Awake()
         {

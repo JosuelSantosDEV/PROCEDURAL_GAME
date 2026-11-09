@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using PROCEDURAL_GAME.Player;
 using PROCEDURAL_GAME.UI;
 using PROCEDURAL_GAME.World;
 using UnityEngine;
@@ -28,6 +29,8 @@ namespace PROCEDURAL_GAME.DevTools
         private Text statusText;
 
         private BiomeProfile biome;
+        private static readonly int DEV_TileVariationOffId = Shader.PropertyToID("_TileVariationOff");
+
         private WorldGenerator world;
         private float timeScaleBefore = 1f;
 
@@ -142,6 +145,12 @@ namespace PROCEDURAL_GAME.DevTools
                 UiKit.SetLayout(lake.gameObject, preferredHeight: 90f, flexibleWidth: 1f);
             }
 
+            DEV_BuildSurvival();
+
+            // Para medir no aparelho quanto a variação da textura do chão custa. É global: vale até fechar o jogo.
+            DEV_CreateToggle(content, "VARIAÇÃO DA TEXTURA DO SOLO", Shader.GetGlobalFloat(DEV_TileVariationOffId) < 0.5f, 0f, 80f, 34,
+                on => Shader.SetGlobalFloat(DEV_TileVariationOffId, on ? 0f : 1f));
+
             List<ScatterProfile> profiles = DEV_TunableProfiles();
             if (profiles.Count == 0)
             {
@@ -151,6 +160,23 @@ namespace PROCEDURAL_GAME.DevTools
             }
 
             foreach (ScatterProfile profile in profiles) DEV_BuildProfile(profile);
+        }
+
+        // Sobrevivência: ainda não há comida no mundo nem ataques; estes botões testam o que depende deles. Só em jogo.
+        private void DEV_BuildSurvival()
+        {
+            PlayerStats stats = FindObjectOfType<PlayerStats>();
+            if (stats == null) return;
+
+            DEV_CreateToggle(content, "SEDE E FOME CONTANDO", !PlayerStats.DEV_NeedsPaused, 0f, 80f, 34, on => PlayerStats.DEV_NeedsPaused = !on);
+
+            RectTransform row = UiKit.CreateRect(content, "Survival");
+            UiKit.AddHorizontalLayout(row.gameObject, 12f, TextAnchor.MiddleCenter);
+            UiKit.SetLayout(row.gameObject, preferredHeight: 80f);
+
+            UiKit.CreateButton(row, "Drink", "BEBER", new Vector2(240f, 80f), 30, stats.Drink);
+            UiKit.CreateButton(row, "Eat", "COMER", new Vector2(240f, 80f), 30, stats.Eat);
+            UiKit.CreateButton(row, "Hit", "ATAQUE -25%", new Vector2(280f, 80f), 30, () => stats.TakeDamage(0.25f));
         }
 
         private void DEV_BuildProfile(ScatterProfile profile)

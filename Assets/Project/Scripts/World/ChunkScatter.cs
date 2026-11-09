@@ -222,7 +222,8 @@ namespace PROCEDURAL_GAME.World
 
             // Densidade escolhida pelo jogador no menu de Desempenho. Reduzir só corta o fim da sequência de
             // tentativas: os objetos que ficam continuam exatamente nos mesmos lugares.
-            int attempts = Mathf.RoundToInt(profile.attemptsPerChunk * PerformanceSettings.GetEffectiveDensity(profile.categoryId));
+            float density = profile.essential ? 1f : PerformanceSettings.GetEffectiveDensity(profile.categoryId);
+            int attempts = Mathf.RoundToInt(profile.attemptsPerChunk * density);
 
             for (int i = 0; i < attempts; i++)
             {

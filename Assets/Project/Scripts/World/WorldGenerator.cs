@@ -104,6 +104,25 @@ namespace PROCEDURAL_GAME.World
         /// <summary>Perfil visual em uso (cores do terreno e atmosfera).</summary>
         public BiomeProfile Biome => biome;
 
+        /// <summary>Coletáveis do mundo. Nulo em bioma sem objetos.</summary>
+        public PickupRegistry Pickups => scatter != null ? scatter.Pickups : null;
+
+        /// <summary>O bioma espalha comida. Sem ela não há como matar a fome, então a fome não conta.</summary>
+        public bool HasFood
+        {
+            get
+            {
+                if (biome == null || biome.scatter == null) return false;
+
+                foreach (ScatterProfile profile in biome.scatter)
+                {
+                    if (profile != null && profile.pickupKind == PickupKind.Food) return true;
+                }
+
+                return false;
+            }
+        }
+
         /// <summary>Distância de visão em uso, em metros: o mundo carrega tudo o que está a esta distância do Player.</summary>
         public float ViewDistanceMeters => viewDistance;
 

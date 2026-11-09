@@ -12,6 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5f2710e03e9c872408b42f6176877f10, type: 3}
   m_Name: ArvoresMobile
   m_EditorClassIdentifier: 
+  pickupKind: 0
+  essential: 0
   prefabs: []
   groups:
   - id: 5Arms
@@ -690,6 +692,7 @@ MonoBehaviour:
     - Summer
     - Misc
     - Green
+    - Food
   zoneSize: 160
   mixByPreference: 1
   lowForestShares: {x: 0.5, y: 0.3, z: 0.2}

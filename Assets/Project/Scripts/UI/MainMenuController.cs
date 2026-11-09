@@ -224,6 +224,7 @@ namespace PROCEDURAL_GAME.UI
         {
             foreach (CategoryOption category in categories) PerformanceSettings.SetDensity(category.Id, PerformanceSettings.DefaultDensity);
             PerformanceSettings.ResetGeneral();
+            ControlSettings.Reset();
             RebuildRows();
         }
 
@@ -251,6 +252,11 @@ namespace PROCEDURAL_GAME.UI
             CreateViewDistanceRow();
             CreateShadowRow();
             CreateGroundQualityRow();
+
+            CreateSectionTitle("Controles");
+            CreateSliderRow("Sensibilidade", ControlSettings.MaxLookSteps, ControlSettings.GetLookSteps(), ControlSettings.FormatLookSteps, ControlSettings.SetLookSteps);
+            CreateSliderRow("Transparência", ControlSettings.MaxTransparencySteps, ControlSettings.GetTransparencySteps(), ControlSettings.FormatTransparencySteps, ControlSettings.SetTransparencySteps);
+
             CreateSectionTitle(PerformanceSettings.GetAutoQuality() ? "Objetos (máximo)" : "Objetos");
 
             categories.Clear();
@@ -507,23 +513,7 @@ namespace PROCEDURAL_GAME.UI
         /// <summary>Linha "rótulo — slider — valor". <paramref name="onChanged"/> recebe o passo escolhido (0 a <paramref name="maxSteps"/>).</summary>
         private void CreateSliderRow(string labelText, int maxSteps, int currentSteps, System.Func<int, string> format, System.Action<int> onChanged)
         {
-            RectTransform row = CreateRowContainer("SliderRow");
-
-            Text label = UiKit.CreateText(row, "Label", labelText, 42, TextAnchor.MiddleLeft, UiKit.TextColor);
-            UiKit.SetLayout(label.gameObject, preferredWidth: RowLabelWidth, preferredHeight: 100f);
-
-            Text value = UiKit.CreateText(row, "Value", format(currentSteps), 40, TextAnchor.MiddleRight, UiKit.AccentColor);
-            UiKit.SetLayout(value.gameObject, preferredWidth: 230f, preferredHeight: 100f);
-
-            UiKit.CreateSlider(row, "Slider", 0, maxSteps, currentSteps, newValue =>
-            {
-                int steps = Mathf.RoundToInt(newValue);
-                onChanged(steps);
-                value.text = format(steps);
-            });
-
-            // Ordem visual: rótulo, slider, valor. O valor foi criado antes só para o slider poder atualizá-lo.
-            value.transform.SetAsLastSibling();
+            UiKit.CreateSliderRow(performanceContent, labelText, RowLabelWidth, maxSteps, currentSteps, format, onChanged);
         }
 
         private RectTransform CreateRowContainer(string rowName)

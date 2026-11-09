@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -11,6 +12,9 @@ namespace PROCEDURAL_GAME.MobileInput
     {
         private int pressedFrame = -1;
 
+        /// <summary>Disparado no toque (para botões liga/desliga: não depende da ordem de execução entre scripts).</summary>
+        public event Action Pressed;
+
         /// <summary>True enquanto o dedo estiver sobre o botão.</summary>
         public bool IsHeld { get; private set; }
 
@@ -21,6 +25,7 @@ namespace PROCEDURAL_GAME.MobileInput
         {
             IsHeld = true;
             pressedFrame = Time.frameCount;
+            Pressed?.Invoke();
         }
 
         public void OnPointerUp(PointerEventData eventData) => IsHeld = false;

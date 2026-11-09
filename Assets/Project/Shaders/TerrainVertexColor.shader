@@ -16,6 +16,12 @@
 //
 // Sem texturas, o WorldGenerator põe uma textura branca e _GroundStrength = 0: o resultado é só a cor de vértice.
 //
+// Variação da textura (para não formar o padrão de quadradinhos): o chão é dividido em manchas de formato irregular e cada mancha lê a
+// textura com um deslocamento próprio. A divisão vem de uma soma de senos da posição, calculada POR VÉRTICE (1 m entre vértices; custa
+// nada por pixel), e fica no w de positionWS, sem interpolador novo. Dentro de uma mancha é uma leitura só, como antes; só na faixa
+// estreita de transição (cerca de 1/4 dos pixels) são duas. Sem rotação: as normais continuam valendo sem conta extra. As derivadas são as da
+// coordenada SEM deslocamento: o mipmap não salta na fronteira. O global _TileVariationOff (ferramenta DEV) desliga para comparar o FPS.
+//
 // Sombras: este shader só RECEBE as sombras da luz principal (árvores e pedras projetam no terreno); o terreno em si
 // não projeta, então não tem passe ShadowCaster. Com as sombras desligadas no jogo, a variante sem sombras é usada e
 // nada é calculado. O nível de sombras é controlado por World/ShadowController.
@@ -87,8 +93,35 @@ Shader "PROCEDURAL_GAME/TerrainVertexColor"
                 half _LumaRef;
             CBUFFER_END
 
+            // Global, fora do bloco do material (ferramenta DEV). Sem ninguém definir, vale 0: variação ligada.
+            float _TileVariationOff;
+
             // Peso mínimo para valer a leitura de uma textura.
             static const half MinWeight = 0.004h;
+
+            // Quantas manchas por unidade do campo de senos: com a textura repetindo a cada 4 m, dá manchas de uns 4 a 8 m.
+            static const float TilePatchScale = 1.6;
+
+            // Faixa (dentro de cada mancha, 0 a 1) em que uma mancha se mistura com a seguinte. Mais larga = transição mais suave e mais leituras duplas.
+            static const float TileBlendStart = 0.38;
+            static const float TileBlendEnd = 0.62;
+
+            // Campo suave e sem repetição visível: senos de frequências sem múltiplo comum, um deformando o outro. Função só da posição: continua
+            // igual na divisa entre chunks.
+            float TilePatchField(float2 xz)
+            {
+                return (sin(xz.x * 0.061 + 1.7 * sin(xz.y * 0.043))
+                      + sin(xz.y * 0.053 + 1.3 * sin(xz.x * 0.037))
+                      + 0.5 * sin((xz.x + xz.y) * 0.127) + 3.0) * TilePatchScale;
+            }
+
+            // Lê a textura com o deslocamento da mancha; só na faixa de transição lê duas vezes. O ramo é seguro: o mipmap vem das derivadas passadas.
+            half4 SampleVaried(TEXTURE2D_PARAM(tex, samp), float2 uvA, float2 uvB, half blend, float2 dx, float2 dy)
+            {
+                if (blend <= 0.0h) return SAMPLE_TEXTURE2D_GRAD(tex, samp, uvA, dx, dy);
+                if (blend >= 1.0h) return SAMPLE_TEXTURE2D_GRAD(tex, samp, uvB, dx, dy);
+                return lerp(SAMPLE_TEXTURE2D_GRAD(tex, samp, uvA, dx, dy), SAMPLE_TEXTURE2D_GRAD(tex, samp, uvB, dx, dy), blend);
+            }
 
             struct Attributes
             {
@@ -105,7 +138,7 @@ Shader "PROCEDURAL_GAME/TerrainVertexColor"
                 half4  color      : TEXCOORD0; // rgb = cor de vértice; a = quanto da textura vale (1 - rocha)
                 half3  normalWS   : TEXCOORD1;
                 half   fogFactor  : TEXCOORD2;
-                float3 positionWS : TEXCOORD3;
+                float4 positionWS : TEXCOORD3; // xyz = posição; w = campo das manchas de variação da textura
                 half2  weights    : TEXCOORD4;
                 half2  sand       : TEXCOORD5;
             };
@@ -116,7 +149,7 @@ Shader "PROCEDURAL_GAME/TerrainVertexColor"
 
                 VertexPositionInputs positions = GetVertexPositionInputs(input.positionOS.xyz);
                 output.positionCS = positions.positionCS;
-                output.positionWS = positions.positionWS;
+                output.positionWS = float4(positions.positionWS, TilePatchField(positions.positionWS.xz));
                 output.normalWS = TransformObjectToWorldNormal(input.normalOS);
                 output.color = input.color;
                 output.weights = input.weights;
@@ -136,6 +169,13 @@ Shader "PROCEDURAL_GAME/TerrainVertexColor"
                 float2 ddxUv = ddx(groundUv);
                 float2 ddyUv = ddy(groundUv);
 
+                // Mancha atual e seguinte: cada uma com o seu deslocamento (razão áurea e raiz de 2: não se repetem tão cedo).
+                float patchField = _TileVariationOff > 0.5 ? 0.0 : input.positionWS.w;
+                float patchIndex = floor(patchField);
+                float2 uvA = groundUv + frac(patchIndex * float2(0.618034, 0.414214));
+                float2 uvB = groundUv + frac((patchIndex + 1.0) * float2(0.618034, 0.414214));
+                half patchBlend = smoothstep(TileBlendStart, TileBlendEnd, frac(patchField));
+
                 // A areia do lago toma o lugar das texturas das zonas: onde ela pesa 1, as zonas nem são lidas.
                 half sandW = input.sand.x;
                 half bedW = input.sand.y;
@@ -146,16 +186,16 @@ Shader "PROCEDURAL_GAME/TerrainVertexColor"
                 half w2 = saturate(1.0h - input.weights.x - input.weights.y) * zoneW;
 
                 half3 ground = 0;
-                if (w0 > MinWeight) ground += w0 * SAMPLE_TEXTURE2D_GRAD(_GroundTex, sampler_GroundTex, groundUv, ddxUv, ddyUv).rgb;
-                if (w1 > MinWeight) ground += w1 * SAMPLE_TEXTURE2D_GRAD(_GroundTex2, sampler_GroundTex, groundUv, ddxUv, ddyUv).rgb;
-                if (w2 > MinWeight) ground += w2 * SAMPLE_TEXTURE2D_GRAD(_GroundTex3, sampler_GroundTex, groundUv, ddxUv, ddyUv).rgb;
+                if (w0 > MinWeight) ground += w0 * SampleVaried(TEXTURE2D_ARGS(_GroundTex, sampler_GroundTex), uvA, uvB, patchBlend, ddxUv, ddyUv).rgb;
+                if (w1 > MinWeight) ground += w1 * SampleVaried(TEXTURE2D_ARGS(_GroundTex2, sampler_GroundTex), uvA, uvB, patchBlend, ddxUv, ddyUv).rgb;
+                if (w2 > MinWeight) ground += w2 * SampleVaried(TEXTURE2D_ARGS(_GroundTex3, sampler_GroundTex), uvA, uvB, patchBlend, ddxUv, ddyUv).rgb;
 
                 half beachW = 1.0h - bedW;
                 if (sandW > MinWeight)
                 {
                     half3 sand = 0;
-                    if (beachW > MinWeight) sand += beachW * SAMPLE_TEXTURE2D_GRAD(_SandTex, sampler_GroundTex, groundUv, ddxUv, ddyUv).rgb;
-                    if (bedW > MinWeight) sand += bedW * SAMPLE_TEXTURE2D_GRAD(_BedTex, sampler_GroundTex, groundUv, ddxUv, ddyUv).rgb;
+                    if (beachW > MinWeight) sand += beachW * SampleVaried(TEXTURE2D_ARGS(_SandTex, sampler_GroundTex), uvA, uvB, patchBlend, ddxUv, ddyUv).rgb;
+                    if (bedW > MinWeight) sand += bedW * SampleVaried(TEXTURE2D_ARGS(_BedTex, sampler_GroundTex), uvA, uvB, patchBlend, ddxUv, ddyUv).rgb;
                     ground += sandW * sand;
                 }
 
@@ -169,15 +209,15 @@ Shader "PROCEDURAL_GAME/TerrainVertexColor"
                 if (_GroundNormalOn > 0.5h)
                 {
                     half3 tangentNormal = 0;
-                    if (w0 > MinWeight) tangentNormal += w0 * UnpackNormal(SAMPLE_TEXTURE2D_GRAD(_GroundNrm, sampler_GroundTex, groundUv, ddxUv, ddyUv));
-                    if (w1 > MinWeight) tangentNormal += w1 * UnpackNormal(SAMPLE_TEXTURE2D_GRAD(_GroundNrm2, sampler_GroundTex, groundUv, ddxUv, ddyUv));
-                    if (w2 > MinWeight) tangentNormal += w2 * UnpackNormal(SAMPLE_TEXTURE2D_GRAD(_GroundNrm3, sampler_GroundTex, groundUv, ddxUv, ddyUv));
+                    if (w0 > MinWeight) tangentNormal += w0 * UnpackNormal(SampleVaried(TEXTURE2D_ARGS(_GroundNrm, sampler_GroundTex), uvA, uvB, patchBlend, ddxUv, ddyUv));
+                    if (w1 > MinWeight) tangentNormal += w1 * UnpackNormal(SampleVaried(TEXTURE2D_ARGS(_GroundNrm2, sampler_GroundTex), uvA, uvB, patchBlend, ddxUv, ddyUv));
+                    if (w2 > MinWeight) tangentNormal += w2 * UnpackNormal(SampleVaried(TEXTURE2D_ARGS(_GroundNrm3, sampler_GroundTex), uvA, uvB, patchBlend, ddxUv, ddyUv));
                     if (sandW > MinWeight)
                     {
                         // Areia: o mesmo relevo da "Qualidade do solo". Sem mapa de normal, o padrão ("bump") dá relevo plano.
                         half3 sandNormal = 0;
-                        if (beachW > MinWeight) sandNormal += beachW * UnpackNormal(SAMPLE_TEXTURE2D_GRAD(_SandNrm, sampler_GroundTex, groundUv, ddxUv, ddyUv));
-                        if (bedW > MinWeight) sandNormal += bedW * UnpackNormal(SAMPLE_TEXTURE2D_GRAD(_BedNrm, sampler_GroundTex, groundUv, ddxUv, ddyUv));
+                        if (beachW > MinWeight) sandNormal += beachW * UnpackNormal(SampleVaried(TEXTURE2D_ARGS(_SandNrm, sampler_GroundTex), uvA, uvB, patchBlend, ddxUv, ddyUv));
+                        if (bedW > MinWeight) sandNormal += bedW * UnpackNormal(SampleVaried(TEXTURE2D_ARGS(_BedNrm, sampler_GroundTex), uvA, uvB, patchBlend, ddxUv, ddyUv));
                         tangentNormal += sandW * sandNormal;
                     }
 
@@ -193,8 +233,8 @@ Shader "PROCEDURAL_GAME/TerrainVertexColor"
 
                 // Sem as palavras-chave de sombra, shadowAttenuation vale 1. Esta versão também suaviza a sombra na borda
                 // da distância máxima (a sombra some aos poucos em vez de cortar).
-                float4 shadowCoord = TransformWorldToShadowCoord(input.positionWS);
-                Light mainLight = GetMainLight(shadowCoord, input.positionWS, half4(1, 1, 1, 1));
+                float4 shadowCoord = TransformWorldToShadowCoord(input.positionWS.xyz);
+                Light mainLight = GetMainLight(shadowCoord, input.positionWS.xyz, half4(1, 1, 1, 1));
 
                 half3 direct = mainLight.color * (saturate(dot(normalWS, mainLight.direction)) * mainLight.distanceAttenuation * mainLight.shadowAttenuation);
                 half3 ambient = SampleSH(normalWS);

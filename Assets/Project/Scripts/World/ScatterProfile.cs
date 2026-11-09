@@ -20,6 +20,13 @@ namespace PROCEDURAL_GAME.World
         [Tooltip("Palmeiras: só nascem na faixa das palmeiras (depois da areia nua).")] Palms
     }
 
+    /// <summary>O que o objeto é para o jogador. Coletáveis entram na lista de <see cref="PickupRegistry"/> e não voltam ao recriar o chunk.</summary>
+    public enum PickupKind
+    {
+        [Tooltip("Cenário: não dá para pegar.")] None,
+        [Tooltip("Comida: o botão vira COMER por perto.")] Food
+    }
+
     /// <summary>
     /// Regras para espalhar um tipo de objeto (árvores, pedras, depois recursos e inimigos) pelos chunks.
     /// As posições são sorteadas só com seed + coordenada do chunk: voltar a um lugar traz os mesmos objetos.
@@ -88,6 +95,12 @@ namespace PROCEDURAL_GAME.World
             /// <summary>Zonas em que a variação nasce: um bit por zona de <see cref="ActiveZones"/> (bit 0 = primeira). -1 = todas (pacote sem zona).</summary>
             public int zoneMask;
         }
+
+        [Header("Jogo")]
+        public PickupKind pickupKind = PickupKind.None;
+
+        [Tooltip("Faz parte do jogo, não do cenário (ex.: comida): nem a qualidade automática nem o menu de Desempenho reduzem a quantidade. Só vale no sorteio livre (sem 'Spacing By Density').")]
+        public bool essential;
 
         [Header("O que espalhar")]
         [Tooltip("Variações sorteadas ao acaso. Só vale quando 'Groups' está vazio. Prefabs vazios são ignorados.")]

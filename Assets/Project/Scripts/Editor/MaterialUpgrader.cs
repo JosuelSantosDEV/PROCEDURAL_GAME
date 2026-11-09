@@ -20,7 +20,7 @@ namespace PROCEDURAL_GAME.EditorTools
         private static readonly string[] SkipPrefixes =
         {
             "Universal Render Pipeline/", "Shader Graphs/", "PROCEDURAL_GAME/", "Hidden/Universal",
-            "UI/", "Sprites/", "TextMeshPro/", "Skybox/", "GUI/", "Particles/", "Standard"
+            "UI/", "Sprites/", "TextMeshPro/", "Skybox/", "GUI/", "Particles/"
         };
 
         // Nomes de propriedade de cada origem, na ordem de preferência.
@@ -56,6 +56,16 @@ namespace PROCEDURAL_GAME.EditorTools
 
             AssetDatabase.SaveAssets();
             Debug.Log($"{materials.Count} material(is) convertido(s) para {TargetShaderName}. Árvores com vento (shaders Foliage/SpeedTree) ficam estáticas por enquanto.");
+        }
+
+        /// <summary>Converte um material se o URP não o desenha (para ferramentas que já sabem quais materiais tratar). Verdadeiro se converteu.</summary>
+        public static bool ConvertIfNeeded(Material material)
+        {
+            Shader target = Shader.Find(TargetShaderName);
+            if (target == null || !NeedsConversion(material)) return false;
+
+            Convert(material, target);
+            return true;
         }
 
         private static List<Material> CollectMaterials()

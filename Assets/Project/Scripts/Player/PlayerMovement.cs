@@ -38,7 +38,7 @@ namespace PROCEDURAL_GAME.Player
 
         [Header("Pulo parado")]
         [Tooltip("Pulando PARADO, o corpo agacha (preparação do clipe de pulo parado) por este tempo (s) antes de sair do chão. 0 = sai na hora. Andando ou correndo, o pulo sai na hora. O menu Setup Player Model grava o valor pelo clipe.")]
-        [SerializeField, Range(0f, 0.5f)] private float standingJumpWindUp = 0f;
+        [SerializeField, Range(0f, 1.5f)] private float standingJumpWindUp = 0f;
 
         [Header("Primeira pessoa")]
         [Tooltip("Parado, o corpo só gira quando a câmera passa deste ângulo (graus) em relação a ele: o 'pescoço' aguenta isso. Andando, o corpo acompanha a câmera sempre.")]
@@ -82,6 +82,21 @@ namespace PROCEDURAL_GAME.Player
         /// <summary>Velocidade de correr (m/s).</summary>
         public float SprintSpeed => sprintSpeed;
 
+        /// <summary>O corpo está preso a uma ação (atacar, coletar, morrer): não anda, não gira e não pula. Quem liga é o PlayerActions.</summary>
+        public bool ActionLocked { get; set; }
+
+        /// <summary>Sem energia: o pedido de correr é ignorado (quem liga é o PlayerStats).</summary>
+        public bool SprintBlocked { get; set; }
+
+        /// <summary>Está correndo de fato neste frame: com a corrida ligada, liberada e em movimento. É o que gasta energia.</summary>
+        public bool IsSprintMoving => horizontalSpeed > StandingSpeed && input.Sprinting && !SprintBlocked;
+
+        /// <summary>
+        /// Se um novo pulo é aceito agora. O PlayerAnimator desliga do início do pulo até o fim da animação de pouso: toques nesse intervalo são
+        /// descartados, não guardados para depois.
+        /// </summary>
+        public bool JumpAllowed { get; set; } = true;
+
         /// <summary>Disparado quando o jogador pede um pulo PARADO e o corpo começa a agachar (o pulo em si sai depois, em <see cref="Jumped"/>).</summary>
         public event System.Action WindUpStarted;
 
@@ -123,7 +138,15 @@ namespace PROCEDURAL_GAME.Player
             Vector3 velocity = horizontalVelocity + Vector3.up * verticalVelocity;
             controller.Move(velocity * Time.deltaTime);
 
-            if (FaceCamera && cameraTransform != null) RotateTowardsCamera(horizontalVelocity);
+            if (ActionLocked)
+            {
+                turningToCamera = false;
+                turnInPlace = 0;
+            }
+            else if (FaceCamera && cameraTransform != null)
+            {
+                RotateTowardsCamera(horizontalVelocity);
+            }
             else
             {
                 turningToCamera = false;
@@ -134,11 +157,14 @@ namespace PROCEDURAL_GAME.Player
 
         private Vector3 GetHorizontalVelocity()
         {
+            // Preso a uma ação ou preparando o pulo parado: o corpo não desliza, mesmo com a manete inclinada.
+            if (ActionLocked || windingUp) return Vector3.zero;
+
             Vector2 move = input.Move;
             Vector3 direction = ToCameraSpace(move);
 
             // ClampMagnitude evita que andar na diagonal seja mais rápido que em linha reta.
-            float speed = input.SprintHeld ? sprintSpeed : walkSpeed;
+            float speed = input.Sprinting && !SprintBlocked ? sprintSpeed : walkSpeed;
             return Vector3.ClampMagnitude(direction, 1f) * speed;
         }
 
@@ -177,7 +203,7 @@ namespace PROCEDURAL_GAME.Player
                     Launch();
                 }
             }
-            else if (isGrounded && input.JumpPressed)
+            else if (isGrounded && JumpAllowed && !ActionLocked && input.JumpPressed)
             {
                 // Só pula com os pés no chão; a gravidade abaixo se encarrega de trazer de volta.
                 if (standingJumpWindUp > 0f && horizontalSpeed <= StandingSpeed)

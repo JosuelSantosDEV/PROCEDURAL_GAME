@@ -24,12 +24,12 @@ namespace PROCEDURAL_GAME.Player
         private static readonly int AirPhaseId = Animator.StringToHash("AirPhase");
         private static readonly int StandingJumpId = Animator.StringToHash("StandingJump");
 
+        // Nomes dos estados de ar no Animator Controller (PlayerBuilder).
+        private static readonly int AirStateHash = Animator.StringToHash("Air");
+        private static readonly int AirStandingStateHash = Animator.StringToHash("AirStanding");
+
         // Velocidade (m/s, sem suavização) abaixo da qual o Player conta como parado / acima da qual conta como andando.
         private const float RestSpeed = 0.05f;
-
-        // Por quanto tempo (s) "Landed" fica ligado depois de pousar: o Animator pode estar terminando outra transição (ex.: a de entrar no ar)
-        // e só então consegue sair do estado de ar; sem essa folga o gatilho do pouso poderia ser perdido.
-        private const float LandedWindow = 0.25f;
 
         // Queda sem pulo mais curta que isto (s): ressalto do terreno correndo. Não conta como pouso: a marcha não é interrompida.
         private const float ShortFallSeconds = 0.35f;
@@ -108,7 +108,6 @@ namespace PROCEDURAL_GAME.Player
         private float moveHold;
         private bool airActive;
         private float airPhase;
-        private float landedUntil;
         private bool airFromJump;
         private float airStart;
         private float gaitRampEnd;
@@ -197,7 +196,18 @@ namespace PROCEDURAL_GAME.Player
             animator.SetBool(GroundedId, grounded);
 
             UpdateAir(grounded, dt);
+
+            // Novo pulo só depois de a animação terminar: no ar e durante todo o fade do pouso, os toques são descartados.
+            movement.JumpAllowed = !airActive && !IsInAirState();
         }
+
+        private bool IsInAirState()
+        {
+            if (IsAirHash(animator.GetCurrentAnimatorStateInfo(0).shortNameHash)) return true;
+            return animator.IsInTransition(0) && IsAirHash(animator.GetNextAnimatorStateInfo(0).shortNameHash);
+        }
+
+        private static bool IsAirHash(int hash) => hash == AirStateHash || hash == AirStandingStateHash;
 
         // Marcha (Gait). No ar fica em zero (uma corrida esperando pronta entrava de uma vez ao tocar o chão); ao pousar sobe em landingGaitRamp,
         // junto com o fade do pouso. Um ressalto curto do terreno correndo não interrompe a marcha.
@@ -267,8 +277,6 @@ namespace PROCEDURAL_GAME.Player
                     if (!takingOff) SetStandingJump(false);
                 }
 
-                landedUntil = 0f;
-
                 float v = movement.VerticalVelocity;
                 float v0 = Mathf.Max(1f, movement.JumpVelocity);
                 airPhase = v >= 0f
@@ -281,13 +289,12 @@ namespace PROCEDURAL_GAME.Player
                 if (IsRealAir()) gaitRampEnd = Time.time + landingGaitRamp;
 
                 airActive = false;
-                landedUntil = Time.time + LandedWindow;
             }
 
             // No chão o clipe segue até o fim no ritmo dele. O valor não é reposto: o estado de ar ainda aparece durante o fade do pouso.
             if (!airActive) airPhase = Mathf.MoveTowards(airPhase, 1f, dt / ClipLength);
 
-            animator.SetBool(LandedId, Time.time < landedUntil);
+            animator.SetBool(LandedId, !airActive);
             animator.SetFloat(AirPhaseId, airPhase);
         }
 
@@ -331,6 +338,9 @@ namespace PROCEDURAL_GAME.Player
                 targetAngle = turn * 90f;
             }
 
+            // Com o jogo pausado, SmoothDamp divide por zero e a velocidade vira NaN, que ao despausar pode travar a direção em NaN.
+            if (Time.deltaTime <= 0f) return;
+
             directionAngle = Mathf.SmoothDampAngle(directionAngle, targetAngle, ref directionVelocity, directionSmoothing);
             float radians = directionAngle * Mathf.Deg2Rad;
             animator.SetFloat(MoveXId, Mathf.Sin(radians));
@@ -347,7 +357,6 @@ namespace PROCEDURAL_GAME.Player
             airActive = true;
             airFromJump = true;
             airStart = Time.time;
-            landedUntil = 0f;
             airPhase = 0f;
 
             SetStandingJump(true);
@@ -357,7 +366,6 @@ namespace PROCEDURAL_GAME.Player
         private void OnJumped()
         {
             jumpedAt = Time.time;
-            landedUntil = 0f;
 
             // Saiu do chão depois da preparação: o gatilho já foi disparado ao agachar.
             if (windingUp)

@@ -175,6 +175,30 @@ namespace PROCEDURAL_GAME.UI
             return slider;
         }
 
+        /// <summary>Linha "rótulo — slider — valor". <paramref name="onChanged"/> recebe o passo escolhido (0 a <paramref name="maxSteps"/>).</summary>
+        public static void CreateSliderRow(Transform parent, string labelText, float labelWidth, int maxSteps, int currentSteps, System.Func<int, string> format, System.Action<int> onChanged)
+        {
+            RectTransform row = CreateRect(parent, "SliderRow");
+            AddHorizontalLayout(row.gameObject, 30f, TextAnchor.MiddleCenter);
+            SetLayout(row.gameObject, preferredHeight: 100f);
+
+            Text label = CreateText(row, "Label", labelText, 42, TextAnchor.MiddleLeft, TextColor);
+            SetLayout(label.gameObject, preferredWidth: labelWidth, preferredHeight: 100f);
+
+            Text value = CreateText(row, "Value", format(currentSteps), 40, TextAnchor.MiddleRight, AccentColor);
+            SetLayout(value.gameObject, preferredWidth: 230f, preferredHeight: 100f);
+
+            CreateSlider(row, "Slider", 0, maxSteps, currentSteps, newValue =>
+            {
+                int steps = Mathf.RoundToInt(newValue);
+                onChanged(steps);
+                value.text = format(steps);
+            });
+
+            // Ordem visual: rótulo, slider, valor. O valor foi criado antes só para o slider poder atualizá-lo.
+            value.transform.SetAsLastSibling();
+        }
+
         /// <summary>Lista vertical com rolagem por toque. Os itens entram em <paramref name="content"/>, que cresce sozinho.</summary>
         public static RectTransform CreateScrollView(Transform parent, string name, out RectTransform content)
         {

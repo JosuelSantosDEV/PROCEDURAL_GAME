@@ -213,6 +213,8 @@ namespace PROCEDURAL_GAME.Core
         private const string AutoQualityKey = "auto.enabled";
         private const string AutoFpsKey = "auto.fps";
         private const string AutoLevelKeyPrefix = "auto.level.";
+        private const string AutoSignatureKeyPrefix = "auto.signature.";
+        private const string AutoGenerationKey = "auto.generation";
 
         /// <summary>
         /// Fator de quantidade de objetos aplicado pela qualidade automática (1 = sem corte). Vale só durante o jogo
@@ -222,16 +224,44 @@ namespace PROCEDURAL_GAME.Core
 
         public static bool GetAutoQuality() => PlayerPrefs.GetInt(AutoQualityKey, 0) == 1;
 
-        public static void SetAutoQuality(bool enabled) => PlayerPrefs.SetInt(AutoQualityKey, enabled ? 1 : 0);
+        public static void SetAutoQuality(bool enabled)
+        {
+            // Ligar de novo recomeça do zero, sem herdar o nível aprendido antes.
+            if (enabled && !GetAutoQuality()) ForgetSavedAutoLevels();
+            PlayerPrefs.SetInt(AutoQualityKey, enabled ? 1 : 0);
+        }
 
         public static int GetAutoTargetFps() => Mathf.Clamp(PlayerPrefs.GetInt(AutoFpsKey, DefaultAutoFps), MinAutoFps, MaxAutoFps);
 
         public static void SetAutoTargetFps(int fps) => PlayerPrefs.SetInt(AutoFpsKey, Mathf.Clamp(fps, MinAutoFps, MaxAutoFps));
 
-        /// <summary>Último nível de qualidade que o aparelho aguentou nesse bioma: o jogo começa dele em vez de reaprender do zero.</summary>
-        public static int GetSavedAutoLevel(string biomeName) => PlayerPrefs.GetInt(AutoLevelKeyPrefix + biomeName, 0);
+        /// <summary>
+        /// Último nível de qualidade que o aparelho aguentou nesse bioma: o jogo começa dele em vez de reaprender do zero. O nível só vale para as
+        /// mesmas escolhas com que foi aprendido: mudou resolução, sombras, solo, visão ou FPS desejado, ou restaurou o padrão, recomeça em 0.
+        /// </summary>
+        public static int GetSavedAutoLevel(string biomeName)
+        {
+            if (PlayerPrefs.GetInt(AutoSignatureKeyPrefix + biomeName, -1) != AutoSignature) return 0;
+            return PlayerPrefs.GetInt(AutoLevelKeyPrefix + biomeName, 0);
+        }
 
-        public static void SetSavedAutoLevel(string biomeName, int level) => PlayerPrefs.SetInt(AutoLevelKeyPrefix + biomeName, level);
+        public static void SetSavedAutoLevel(string biomeName, int level)
+        {
+            PlayerPrefs.SetInt(AutoLevelKeyPrefix + biomeName, level);
+            PlayerPrefs.SetInt(AutoSignatureKeyPrefix + biomeName, AutoSignature);
+        }
+
+        // Muda quando muda qualquer escolha que o nível corta.
+        private static int AutoSignature =>
+            GetRenderQuality()
+            + (GetGroundQuality() ? 10 : 0)
+            + GetShadowLevel() * 100
+            + GetViewLevel() * 1000
+            + GetAutoTargetFps() * 10000
+            + PlayerPrefs.GetInt(AutoGenerationKey, 0) * 1000000;
+
+        // Invalida o nível gravado de todos os biomas de uma vez.
+        private static void ForgetSavedAutoLevels() => PlayerPrefs.SetInt(AutoGenerationKey, PlayerPrefs.GetInt(AutoGenerationKey, 0) + 1);
 
         /// <summary>Apaga as escolhas gerais (FPS alvo, contador, qualidade automática, sombras, distância de visão e qualidade do solo e de renderização): voltam a valer os valores da cena.</summary>
         public static void ResetGeneral()
@@ -244,6 +274,7 @@ namespace PROCEDURAL_GAME.Core
             PlayerPrefs.DeleteKey(ViewLevelKey);
             PlayerPrefs.DeleteKey(GroundQualityKey);
             PlayerPrefs.DeleteKey(RenderQualityKey);
+            ForgetSavedAutoLevels();
             renderQualityCache = -1;
             shadowLevelCache = -1;
             viewLevelCache = -1;

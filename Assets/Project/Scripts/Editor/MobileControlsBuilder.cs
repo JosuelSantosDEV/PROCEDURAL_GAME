@@ -48,8 +48,10 @@ namespace PROCEDURAL_GAME.EditorTools
             // Direita: arrastar para olhar. Criado antes dos botões para ficar atrás deles.
             TouchLookArea lookArea = CreateLookArea(canvas);
 
-            TouchButton jump = CreateButton(canvas, "JumpButton", "Pular", new Vector2(1f, 0f), new Vector2(-200f, 200f), 200f, fill, ring);
-            TouchButton sprint = CreateButton(canvas, "SprintButton", "Correr", new Vector2(1f, 0f), new Vector2(-450f, 130f), 150f, fill, ring);
+            // Ataque é o maior e fica sob o polegar; Pular e Correr em volta dele.
+            TouchButton attack = CreateButton(canvas, "AttackButton", "Atacar", new Vector2(1f, 0f), new Vector2(-190f, 190f), 210f, fill, ring);
+            TouchButton jump = CreateButton(canvas, "JumpButton", "Pular", new Vector2(1f, 0f), new Vector2(-440f, 110f), 160f, fill, ring);
+            TouchButton sprint = CreateButton(canvas, "SprintButton", "Correr", new Vector2(1f, 0f), new Vector2(-430f, 300f), 140f, fill, ring);
             TouchButton toggleCamera = CreateButton(canvas, "ToggleCameraButton", "Câmera", new Vector2(1f, 1f), new Vector2(-110f, -110f), 110f, fill, ring);
 
             SerializedObject controlsSo = new SerializedObject(controls);
@@ -58,6 +60,7 @@ namespace PROCEDURAL_GAME.EditorTools
             controlsSo.FindProperty("jumpButton").objectReferenceValue = jump;
             controlsSo.FindProperty("sprintButton").objectReferenceValue = sprint;
             controlsSo.FindProperty("toggleCameraButton").objectReferenceValue = toggleCamera;
+            controlsSo.FindProperty("attackButton").objectReferenceValue = attack;
             controlsSo.ApplyModifiedPropertiesWithoutUndo();
 
             LinkToPlayerAndCamera(controls);
