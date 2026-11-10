@@ -11,6 +11,8 @@ namespace PROCEDURAL_GAME.Player
     /// Vai no objeto do Animator ("Model"; o callback OnAnimatorIK só chega aí) e exige "IK Pass" ligado na camada 0 do controller
     /// (PROCEDURAL_GAME > Player > Setup Player Model faz os dois). Custo: 2 raios por frame.
     /// </summary>
+    // Depois do PlayerAnimator (110): usa a correção de altura (VisualLift) calculada neste mesmo frame.
+    [DefaultExecutionOrder(120)]
     [RequireComponent(typeof(Animator))]
     public class PlayerFootIK : MonoBehaviour
     {
@@ -78,6 +80,12 @@ namespace PROCEDURAL_GAME.Player
         private float ikWeight;
         private float pelvisTarget;
         private float pelvisOffset;
+
+        /// <summary>
+        /// Correção vertical extra do corpo (m), pedida pelo PlayerAnimator enquanto a pose de queda do Falling To Roll aparece: o clipe
+        /// começa com o corpo bem mais alto que o ápice do pulo, e sem isso o corpo daria um salto para cima ao trocar de pose.
+        /// </summary>
+        public float VisualLift { get; set; }
         private float airUntil;
         private bool ready;
 
@@ -131,6 +139,7 @@ namespace PROCEDURAL_GAME.Player
             {
                 pelvisOffset = 0f;
                 ikWeight = 0f;
+                VisualLift = 0f;
                 transform.localPosition = baseLocalPosition;
             }
         }
@@ -149,7 +158,7 @@ namespace PROCEDURAL_GAME.Player
             float target = Mathf.Clamp(pelvisTarget, -maxPelvisDrop * scale, 0f) * ikWeight;
             float k = 1f - Mathf.Exp(-pelvisFollow * Time.deltaTime);
             pelvisOffset = Mathf.Lerp(pelvisOffset, target, k);
-            transform.localPosition = baseLocalPosition + Vector3.up * pelvisOffset;
+            transform.localPosition = baseLocalPosition + Vector3.up * (pelvisOffset + VisualLift);
         }
 
         private void OnAnimatorIK(int layerIndex)

@@ -87,6 +87,10 @@ namespace PROCEDURAL_GAME.Player
 
         [SerializeField, Range(0f, 1f)] private float standingLandPhase = 0.75f;
 
+        [Header("Queda do pulo com rolagem")]
+        [Tooltip("Correção de altura do corpo (m, já na escala) ao longo do começo do Falling To Roll (x = ponto 0 a 1 do clipe), medida pelo menu: no ápice o quadril fica na altura do ápice do pulo e desce até a pose do toque no chão, sem o salto para cima do começo do clipe. Vazia = sem correção.")]
+        [SerializeField] private AnimationCurve rollFallLift = new AnimationCurve();
+
         [Tooltip("Depois de pousar, tempo (s) para a marcha sair do parado e chegar em andar/correr: a corrida só entra de vez quando o corpo já absorveu o pouso. Acompanha o fade do pouso (LandingFade no PlayerBuilder).")]
         [SerializeField, Min(0.01f)] private float landingGaitRamp = 0.25f;
 
@@ -123,6 +127,7 @@ namespace PROCEDURAL_GAME.Player
         private float moveTime;
         private float rollPose;
         private bool hasRollParameters;
+        private PlayerFootIK footIk;
 
         private void Awake()
         {
@@ -141,6 +146,7 @@ namespace PROCEDURAL_GAME.Player
 
             // Controller antigo (antes de rodar o menu de novo): sem os parâmetros da rolagem, não os escreve (evita avisos todo frame).
             hasRollParameters = HasParameter(animator, RollPhaseId) && HasParameter(animator, RollingId) && HasParameter(animator, RollFallId);
+            footIk = animator.GetComponent<PlayerFootIK>();
         }
 
         private void OnEnable()
@@ -254,6 +260,25 @@ namespace PROCEDURAL_GAME.Player
             animator.SetBool(RollFallId, fall);
             animator.SetBool(RollingId, movement.IsRolling);
             animator.SetFloat(RollPhaseId, rollPose);
+
+            // Correção de altura na proporção em que a pose do Falling To Roll aparece: durante o fade a partir do ápice o corpo fica na
+            // altura do ápice (nem sobe, nem cai de repente).
+            if (footIk != null)
+            {
+                float lift = rollFallLift != null && rollFallLift.length > 0 ? rollFallLift.Evaluate(rollPose) : 0f;
+                footIk.VisualLift = lift * RollStateWeight();
+            }
+        }
+
+        // Quanto da pose atual vem do estado Roll (0 a 1), incluindo os fades de entrada e saída.
+        private float RollStateWeight()
+        {
+            AnimatorStateInfo current = animator.GetCurrentAnimatorStateInfo(0);
+            if (!animator.IsInTransition(0)) return current.shortNameHash == RollStateHash ? 1f : 0f;
+
+            float t = Mathf.Clamp01(animator.GetAnimatorTransitionInfo(0).normalizedTime);
+            if (animator.GetNextAnimatorStateInfo(0).shortNameHash == RollStateHash) return t;
+            return current.shortNameHash == RollStateHash ? 1f - t : 0f;
         }
 
         /// <summary>O Animator Controller tem este parâmetro?</summary>

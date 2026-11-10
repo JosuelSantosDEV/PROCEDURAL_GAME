@@ -222,7 +222,7 @@ namespace PROCEDURAL_GAME.EditorTools
 
             // Rolagem do pulo em movimento (opcional: sem o arquivo, o pulo em movimento pousa normal).
             AnimationClip rollClip = AssetImporter.GetAtPath(RollPath) != null ? EnsureMixamoClip(RollPath, false) : null;
-            RollData roll = rollClip != null ? MeasureRoll(modelAsset, rollClip) : default;
+            RollData roll = rollClip != null ? MeasureRoll(modelAsset, rollClip, FindClip(JumpPath), jumpPhases.apex) : default;
             if (rollClip == null) Debug.LogWarning($"'{RollPath}' não encontrado: o pulo em movimento pousa sem rolar.");
 
             AnimatorController controller = EnsureController(walkSpeed, sprintSpeed, idles, walkClips, runClips, walkScales, runScales, jumpPhases, standingJump, standingPhases, actionClips, rollClip);
@@ -277,6 +277,7 @@ namespace PROCEDURAL_GAME.EditorTools
             }
             animatorSo.FindProperty("walkNaturalSpeed").floatValue = walkNatural;
             animatorSo.FindProperty("runNaturalSpeed").floatValue = runNatural;
+            animatorSo.FindProperty("rollFallLift").animationCurveValue = rollClip != null && roll.fallLift != null ? roll.fallLift : new AnimationCurve();
             animatorSo.ApplyModifiedPropertiesWithoutUndo();
 
             // Sobrevivência: vida, energia, sede e fome (a tela é montada por código pelo SurvivalHud).
@@ -1237,6 +1238,7 @@ namespace PROCEDURAL_GAME.EditorTools
             public float exit;
             public AnimationCurve distance;
             public float naturalSpeed;
+            public AnimationCurve fallLift;
         }
 
         /// <summary>
@@ -1244,7 +1246,7 @@ namespace PROCEDURAL_GAME.EditorTools
         /// quadril), quando fica de pé de novo (quadril volta a 85% da altura final depois do ponto mais baixo) e quantos metros o corpo
         /// avança ao longo do clipe (curva RootT do humanoide = centro do corpo, em unidades do avatar). Tudo já na escala do Player.
         /// </summary>
-        private static RollData MeasureRoll(GameObject modelAsset, AnimationClip clip)
+        private static RollData MeasureRoll(GameObject modelAsset, AnimationClip clip, AnimationClip jumpClip, float jumpApexPhase)
         {
             RollData fallback = new RollData { impact = 0.25f, exit = 0.85f, distance = null, naturalSpeed = 4f };
             const int Samples = 90;
@@ -1323,10 +1325,18 @@ namespace PROCEDURAL_GAME.EditorTools
                     exit = Mathf.Clamp((float)exit / Samples, (float)impact / Samples + 0.1f, 0.97f)
                 };
 
-                if (hipsY[0] - standY > 0.5f)
+                // Altura do quadril no ápice do pulo (Jump.fbx): é onde a pose de queda tem de começar.
+                float apexHips = hipsY[impact];
+                if (jumpClip != null)
                 {
-                    Debug.LogWarning($"Falling To Roll: no começo do clipe o quadril está {hipsY[0] - standY:0.00} m acima do de pé (escala 1): a queda pode aparecer alta demais.");
+                    temp.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+                    jumpClip.SampleAnimation(temp, jumpClip.length * jumpApexPhase);
+                    apexHips = temp.transform.InverseTransformPoint(hips.position).y;
                 }
+
+                data.fallLift = BuildFallLift(hipsY, impact, apexHips, Samples);
+                Debug.Log($"Falling To Roll: no começo o quadril está {hipsY[0] - apexHips:0.00} m acima do ápice do pulo (escala 1); " +
+                          $"corrigido na queda ({(apexHips - hipsY[0]) * PlayerScale:0.00} m no ápice, 0 ao tocar o chão).");
 
                 data.distance = MeasureRollDistance(clip, probe, data, out data.naturalSpeed, out float angle);
                 if (data.distance == null)
@@ -1352,6 +1362,42 @@ namespace PROCEDURAL_GAME.EditorTools
             {
                 if (temp != null) Object.DestroyImmediate(temp);
             }
+        }
+
+        /// <summary>
+        /// Correção de altura (m, na escala do Player) do começo do Falling To Roll até o toque no chão. O quadril desejado sai da altura do
+        /// ápice do pulo e chega à do toque no ritmo da descida do próprio clipe (nunca sobe); a correção é a diferença para o quadril do clipe.
+        /// Depois do toque é zero: a rolagem fica como no clipe.
+        /// </summary>
+        private static AnimationCurve BuildFallLift(float[] hipsY, int impact, float apexHips, int samples)
+        {
+            float start = hipsY[0];
+            float touch = hipsY[impact];
+            float drop = start - touch;
+
+            Keyframe[] keys = new Keyframe[impact + 2];
+            float lowest = start;
+            for (int i = 0; i <= impact; i++)
+            {
+                lowest = Mathf.Min(lowest, hipsY[i]);
+                float progress = drop > 0.05f ? Mathf.Clamp01((start - lowest) / drop) : (impact > 0 ? (float)i / impact : 1f);
+                if (i == impact) progress = 1f;
+
+                float wanted = Mathf.Lerp(apexHips, touch, progress);
+                keys[i] = new Keyframe((float)i / samples, (wanted - hipsY[i]) * PlayerScale);
+            }
+
+            keys[impact + 1] = new Keyframe(1f, 0f);
+            if (keys[impact + 1].time <= keys[impact].time) System.Array.Resize(ref keys, impact + 1);
+
+            // Tangentes lineares.
+            for (int i = 0; i < keys.Length; i++)
+            {
+                keys[i].inTangent = i > 0 ? (keys[i].value - keys[i - 1].value) / (keys[i].time - keys[i - 1].time) : 0f;
+                keys[i].outTangent = i < keys.Length - 1 ? (keys[i + 1].value - keys[i].value) / (keys[i + 1].time - keys[i].time) : 0f;
+            }
+
+            return new AnimationCurve(keys);
         }
 
         // Curva (ponto 0..1 do clipe -> metros para a frente, já na escala do Player, nunca recuando) a partir da posição do centro do corpo
