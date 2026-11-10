@@ -92,11 +92,18 @@ namespace PROCEDURAL_GAME.EditorTools
         private const float BaseGravity = -20f;
         private const float BaseGroundedStick = -2f;
 
+        // Pulo em movimento (escala 1): 2,2 m e -22 m/s² na escala 2x. Sai do chão a ~10 m/s em vez de ~15,5 m/s e sobe em 0,45 s.
+        private const float BaseMovingJumpHeight = 1.1f;
+        private const float BaseMovingJumpGravity = -11f;
+
+        // Fade da corrida para a pose do pulo (s). Com 0,05 s a pose trocava de uma vez.
+        private const float MovingJumpEntryFade = 0.2f;
+
         // Tempo máximo (s) de agachar antes de um pulo parado sair do chão (mais que isso o toque parece atrasado).
         private const float StandingJumpMaxWindUp = 1f;
 
         // Duração de cada golpe na tela (s): a animação é acelerada ou freada para caber aqui, sem passar destes limites de velocidade.
-        private const float HookTargetSeconds = 0.9f;
+        private const float HookTargetSeconds = 1.5f;
         private const float KickTargetSeconds = 1.1f;
         private const float CrossTargetSeconds = 0.9f;
         private const float MinAttackSpeed = 0.75f;
@@ -182,7 +189,8 @@ namespace PROCEDURAL_GAME.EditorTools
 
             ActionClips actionClips = new ActionClips
             {
-                hook = EnsureMixamoClip(HookPath, false),
+                // O gancho avança e recua no próprio clipe: esse deslocamento precisa ficar na pose.
+                hook = EnsureMixamoClip(HookPath, false, true),
                 kick = EnsureMixamoClip(KickPath, false),
                 cross = EnsureMixamoClip(CrossPath, false),
                 death = EnsureMixamoClip(DeathPath, false),
@@ -329,7 +337,9 @@ namespace PROCEDURAL_GAME.EditorTools
         /// Prepara um clipe do Mixamo (Animations/Walking.fbx ou Running.fbx): Humanoid com o Avatar do Player, em loop (ou não, conforme o clipe), sem root motion
         /// empurrando o Player. Só reimporta se ainda não estiver assim. Devolve o clipe (null com erro no Console se não achar o arquivo).
         /// </summary>
-        private static AnimationClip EnsureMixamoClip(string path, bool loop)
+        // bakeRootXZ: o deslocamento horizontal do clipe fica na pose (o corpo avança e recua, a cápsula do Player não sai do lugar). Sem isso ele
+        // vira root motion, que o jogo não aplica, e simplesmente some.
+        private static AnimationClip EnsureMixamoClip(string path, bool loop, bool bakeRootXZ = false)
         {
             ModelImporter importer = AssetImporter.GetAtPath(path) as ModelImporter;
             if (importer == null)
@@ -356,7 +366,7 @@ namespace PROCEDURAL_GAME.EditorTools
             }
 
             ModelImporterClipAnimation[] clips = importer.clipAnimations;
-            bool configured = clips != null && clips.Length > 0 && clips[0].loopTime == loop;
+            bool configured = clips != null && clips.Length > 0 && clips[0].loopTime == loop && clips[0].lockRootPositionXZ == bakeRootXZ;
             if (!configured)
             {
                 clips = importer.defaultClipAnimations; // com os quadros reais do arquivo
@@ -372,10 +382,10 @@ namespace PROCEDURAL_GAME.EditorTools
                     clip.loopTime = loop;
                     clip.lockRootRotation = true;
                     clip.lockRootHeightY = true;
-                    clip.lockRootPositionXZ = false;
+                    clip.lockRootPositionXZ = bakeRootXZ;
                     clip.keepOriginalOrientation = !loop; // pulo (sem loop): como o Jump.fbx do projeto antigo
                     clip.keepOriginalPositionY = true;
-                    clip.keepOriginalPositionXZ = false;
+                    clip.keepOriginalPositionXZ = bakeRootXZ;
                 }
 
                 importer.clipAnimations = clips;
@@ -413,6 +423,8 @@ namespace PROCEDURAL_GAME.EditorTools
             so.FindProperty("sprintSpeed").floatValue = sprintSpeed;
             so.FindProperty("jumpHeight").floatValue = BaseJumpHeight * PlayerScale;
             so.FindProperty("gravity").floatValue = BaseGravity * PlayerScale;
+            so.FindProperty("movingJumpHeight").floatValue = BaseMovingJumpHeight * PlayerScale;
+            so.FindProperty("movingJumpGravity").floatValue = BaseMovingJumpGravity * PlayerScale;
             so.FindProperty("groundedStickVelocity").floatValue = BaseGroundedStick * PlayerScale;
             so.FindProperty("standingJumpWindUp").floatValue = standingWindUp;
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -914,7 +926,8 @@ namespace PROCEDURAL_GAME.EditorTools
         {
             AnimatorStateTransition toMoving = from.AddTransition(air);
             toMoving.hasExitTime = false;
-            toMoving.duration = 0.05f;
+            toMoving.hasFixedDuration = true;
+            toMoving.duration = MovingJumpEntryFade;
             toMoving.AddCondition(AnimatorConditionMode.If, 0f, "Jump");
             if (airStanding != null) toMoving.AddCondition(AnimatorConditionMode.IfNot, 0f, "StandingJump");
 

@@ -29,6 +29,12 @@ namespace PROCEDURAL_GAME.Player
         [Tooltip("Altura máxima do pulo, em metros. A velocidade inicial é calculada a partir dela e da gravidade.")]
         [SerializeField, Min(0f)] private float jumpHeight = 1.5f;
 
+        [Tooltip("Altura do pulo em movimento (andando ou correndo), em metros. Menor que a do pulo parado: somada à velocidade para a frente, a subida ficava íngreme.")]
+        [SerializeField, Min(0f)] private float movingJumpHeight = 1.1f;
+
+        [Tooltip("Gravidade só durante o pulo em movimento (m/s², negativa). Mais fraca = saída do chão com menos velocidade, subida mais suave.")]
+        [SerializeField] private float movingJumpGravity = -11f;
+
         [Header("Gravidade")]
         [Tooltip("Aceleração da gravidade (negativa = para baixo), em m/s².")]
         [SerializeField] private float gravity = -20f;
@@ -55,6 +61,8 @@ namespace PROCEDURAL_GAME.Player
         private PlayerInputReader input;
         private float verticalVelocity;
         private float horizontalSpeed;
+        private float activeGravity;
+        private float activeJumpVelocity;
         private Vector3 horizontalVelocity;
         private bool turningToCamera;
         private int turnInPlace;
@@ -110,7 +118,7 @@ namespace PROCEDURAL_GAME.Player
         public float HorizontalSpeed => horizontalSpeed;
 
         /// <summary>Velocidade vertical inicial do pulo (m/s). O PlayerAnimator mapeia a velocidade vertical atual para a pose do clipe.</summary>
-        public float JumpVelocity => GetJumpVelocity();
+        public float JumpVelocity => activeJumpVelocity;
 
         /// <summary>Velocidade vertical em m/s (positiva subindo).</summary>
         public float VerticalVelocity => verticalVelocity;
@@ -122,6 +130,7 @@ namespace PROCEDURAL_GAME.Player
         {
             controller = GetComponent<CharacterController>();
             input = GetComponent<PlayerInputReader>();
+            ResetJumpPhysics();
 
             if (cameraTransform == null && Camera.main != null)
             {
@@ -190,6 +199,7 @@ namespace PROCEDURAL_GAME.Player
             if (isGrounded && verticalVelocity < 0f)
             {
                 verticalVelocity = groundedStickVelocity;
+                ResetJumpPhysics();
             }
 
             if (windingUp)
@@ -200,7 +210,7 @@ namespace PROCEDURAL_GAME.Player
                 else if (windUpTimer <= 0f)
                 {
                     windingUp = false;
-                    Launch();
+                    Launch(jumpHeight, gravity);
                 }
             }
             else if (isGrounded && JumpAllowed && !ActionLocked && input.JumpPressed)
@@ -212,25 +222,38 @@ namespace PROCEDURAL_GAME.Player
                     windUpTimer = standingJumpWindUp;
                     WindUpStarted?.Invoke();
                 }
+                else if (horizontalSpeed > StandingSpeed)
+                {
+                    Launch(movingJumpHeight, movingJumpGravity);
+                }
                 else
                 {
-                    Launch();
+                    Launch(jumpHeight, gravity);
                 }
             }
 
-            verticalVelocity += gravity * Time.deltaTime;
+            verticalVelocity += activeGravity * Time.deltaTime;
         }
 
-        private void Launch()
+        private void Launch(float height, float jumpGravity)
         {
-            verticalVelocity = GetJumpVelocity();
+            activeGravity = jumpGravity;
+            activeJumpVelocity = GetJumpVelocity(height, jumpGravity);
+            verticalVelocity = activeJumpVelocity;
             Jumped?.Invoke();
+        }
+
+        // No chão e em queda sem pulo (borda) valem a gravidade e o pulo normais.
+        private void ResetJumpPhysics()
+        {
+            activeGravity = gravity;
+            activeJumpVelocity = GetJumpVelocity(jumpHeight, gravity);
         }
 
         /// <summary>
         /// Física: para subir uma altura h com gravidade g, a velocidade inicial é v = √(2·h·|g|).
         /// </summary>
-        private float GetJumpVelocity() => Mathf.Sqrt(2f * jumpHeight * -gravity);
+        private static float GetJumpVelocity(float height, float jumpGravity) => Mathf.Sqrt(2f * height * -jumpGravity);
 
         /// <summary>
         /// Primeira pessoa: o corpo acompanha o giro da câmera (o jogador não gira o pescoço 360°). Andando, alinha rápido; parado, só gira
