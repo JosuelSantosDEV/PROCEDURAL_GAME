@@ -39,6 +39,21 @@ namespace PROCEDURAL_GAME.EditorTools
         private const string CrouchDownPath = Root + "/Animations/Standing To Crouched.fbx";
         private const string CrouchUpPath = Root + "/Animations/Crouched To Standing.fbx";
 
+        // Fim do pulo em movimento: desce com a pose de queda e rola ao tocar o chão (Mixamo "Falling To Roll", baixado pelo usuário).
+        // Baixado SEM "In Place": o avanço da rolagem é medido no clipe e aplicado pelo CharacterController.
+        private const string RollPath = Root + "/Animations/Falling To Roll.fbx";
+
+        // Fade da pose do ápice do pulo para a de queda do Falling To Roll (s) e, se o corpo tocar o chão ainda subindo (rampa), direto para a rolagem.
+        private const float RollFallFade = 0.2f;
+        private const float RollTouchFade = 0.12f;
+
+        // Fade do golpe para o pulo ou para andar quando a recuperação é cancelada (s).
+        private const float AttackCancelFade = 0.2f;
+
+        // Limites de velocidade (m/s de animação) das transições parado <-> locomoção.
+        private const float StopSpeed = 0.1f;
+        private const float MoveSpeed = 0.15f;
+
         // Pacote Burak Uzun (Asset Store, humanoide, in place): usado no lugar, sem copiar. Os 3 primeiros idles entram junto com o Idle do Player.
         private const string BurakIdlePath = "Assets/Burak Uzun/BasicCharacterAnimations/Character Animations/Idles/Idle_InPlace.fbx";
         // Só o "Bored" (uma vez só, depois de 4 voltas do idle antigo). Idle_InPlace e Idle_Alt_InPlace ficaram de fora a pedido do usuário.
@@ -79,7 +94,7 @@ namespace PROCEDURAL_GAME.EditorTools
         private const float BaseEyeHeight = 0.6f;
         private const float BasePivotHeight = 1.2f;
         // 6 m e 0,35 m na escala 2x: a 8 m e 0,5 m, na floresta, quase sempre havia um tronco na frente.
-        private const float BaseThirdPersonDistance = 3f;
+        private const float BaseThirdPersonDistance = 3.5f;
         private const float BaseCameraCollisionRadius = 0.175f;
         // Limite de olhar para baixo em 1ª pessoa com corpo visível (graus). Era 60; o usuário pediu 5° a menos.
         private const float FirstPersonMaxPitch = 55f;
@@ -199,7 +214,18 @@ namespace PROCEDURAL_GAME.EditorTools
             };
             if (actionClips.hook == null || actionClips.kick == null || actionClips.cross == null || actionClips.death == null || actionClips.crouchDown == null || actionClips.crouchUp == null) return;
 
-            AnimatorController controller = EnsureController(walkSpeed, sprintSpeed, idles, walkClips, runClips, walkScales, runScales, jumpPhases, standingJump, standingPhases, actionClips);
+            // Fases de cada golpe: o fim do movimento rápido da mão/pé é onde começa a recuperação (cancelável).
+            Vector2 hookWindow = MeasureStrikeWindow(modelAsset, actionClips.hook, "gancho", new Vector2(0.3f, 0.5f));
+            Vector2 kickWindow = MeasureStrikeWindow(modelAsset, actionClips.kick, "chute", new Vector2(0.386f, 0.499f));
+            Vector2 crossWindow = MeasureStrikeWindow(modelAsset, actionClips.cross, "direto", new Vector2(0.3f, 0.5f));
+            Debug.Log("Chute no projeto antigo (evento de acerto): 0,39 a 0,50 do clipe. Compare com a medição acima.");
+
+            // Rolagem do pulo em movimento (opcional: sem o arquivo, o pulo em movimento pousa normal).
+            AnimationClip rollClip = AssetImporter.GetAtPath(RollPath) != null ? EnsureMixamoClip(RollPath, false) : null;
+            RollData roll = rollClip != null ? MeasureRoll(modelAsset, rollClip) : default;
+            if (rollClip == null) Debug.LogWarning($"'{RollPath}' não encontrado: o pulo em movimento pousa sem rolar.");
+
+            AnimatorController controller = EnsureController(walkSpeed, sprintSpeed, idles, walkClips, runClips, walkScales, runScales, jumpPhases, standingJump, standingPhases, actionClips, rollClip);
             if (controller == null) return;
 
             Transform player = movement.transform;
@@ -232,6 +258,7 @@ namespace PROCEDURAL_GAME.EditorTools
             GetOrAdd<PlayerFootIK>(model.transform);
 
             ApplyMovement(movement, walkSpeed, sprintSpeed, standingWindUp);
+            ApplyRoll(movement, rollClip, roll);
 
             PlayerAnimator playerAnimator = GetOrAdd<PlayerAnimator>(player);
             SerializedObject animatorSo = new SerializedObject(playerAnimator);
@@ -264,6 +291,9 @@ namespace PROCEDURAL_GAME.EditorTools
             actionsSo.FindProperty("deathSeconds").floatValue = actionClips.death.length;
             actionsSo.FindProperty("crouchDownSeconds").floatValue = actionClips.crouchDown.length;
             actionsSo.FindProperty("crouchUpSeconds").floatValue = actionClips.crouchUp.length;
+            actionsSo.FindProperty("hookHitWindow").vector2Value = hookWindow;
+            actionsSo.FindProperty("kickHitWindow").vector2Value = kickWindow;
+            actionsSo.FindProperty("crossHitWindow").vector2Value = crossWindow;
             actionsSo.ApplyModifiedPropertiesWithoutUndo();
 
             GetOrAdd<SurvivalHud>(player);
@@ -427,6 +457,24 @@ namespace PROCEDURAL_GAME.EditorTools
             so.FindProperty("movingJumpGravity").floatValue = BaseMovingJumpGravity * PlayerScale;
             so.FindProperty("groundedStickVelocity").floatValue = BaseGroundedStick * PlayerScale;
             so.FindProperty("standingJumpWindUp").floatValue = standingWindUp;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(movement);
+        }
+
+        // Dados da rolagem no PlayerMovement (que move o corpo pela curva medida no clipe e diz ao PlayerAnimator em que ponto do clipe está).
+        private static void ApplyRoll(PlayerMovement movement, AnimationClip rollClip, RollData roll)
+        {
+            SerializedObject so = new SerializedObject(movement);
+            so.FindProperty("rollClipLength").floatValue = rollClip != null ? rollClip.length : 0f;
+
+            if (rollClip != null)
+            {
+                so.FindProperty("rollImpactPhase").floatValue = roll.impact;
+                so.FindProperty("rollExitPhase").floatValue = roll.exit;
+                so.FindProperty("rollDistance").animationCurveValue = roll.distance ?? new AnimationCurve();
+                so.FindProperty("rollNaturalSpeed").floatValue = Mathf.Max(0.1f, roll.naturalSpeed);
+            }
+
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(movement);
         }
@@ -635,7 +683,7 @@ namespace PROCEDURAL_GAME.EditorTools
             return clips;
         }
 
-        private static AnimatorController EnsureController(float walkSpeed, float sprintSpeed, List<AnimationClip> idles, AnimationClip[] walkClips, AnimationClip[] runClips, float[] walkScales, float[] runScales, JumpPhases jumpPhases, AnimationClip standingJump, JumpPhases standingPhases, ActionClips actionClips)
+        private static AnimatorController EnsureController(float walkSpeed, float sprintSpeed, List<AnimationClip> idles, AnimationClip[] walkClips, AnimationClip[] runClips, float[] walkScales, float[] runScales, JumpPhases jumpPhases, AnimationClip standingJump, JumpPhases standingPhases, ActionClips actionClips, AnimationClip rollClip)
         {
             AnimationClip idle = idles[0];
             AnimationClip jump = FindClip(JumpPath);
@@ -668,6 +716,12 @@ namespace PROCEDURAL_GAME.EditorTools
             controller.AddParameter("Cross", AnimatorControllerParameterType.Trigger);
             controller.AddParameter("Collect", AnimatorControllerParameterType.Trigger);
             controller.AddParameter("Die", AnimatorControllerParameterType.Trigger);
+            // Golpe em andamento (PlayerActions). Desligado no meio do golpe = recuperação cancelada pela manete: volta a andar.
+            controller.AddParameter("Attacking", AnimatorControllerParameterType.Bool);
+            // Pulo em movimento descendo (vai rolar ao tocar o chão), rolando no chão e o ponto (0..1) do clipe Falling To Roll (PlayerAnimator).
+            controller.AddParameter("RollFall", AnimatorControllerParameterType.Bool);
+            controller.AddParameter("Rolling", AnimatorControllerParameterType.Bool);
+            controller.AddParameter("RollPhase", AnimatorControllerParameterType.Float);
             // Ponto (0..1) do clipe de pulo que o estado Air mostra; o PlayerAnimator o calcula pela velocidade vertical e, ao pousar, o leva até o fim.
             controller.AddParameter(new AnimatorControllerParameter { name = "AirPhase", type = AnimatorControllerParameterType.Float, defaultFloat = 0.3f });
 
@@ -705,6 +759,21 @@ namespace PROCEDURAL_GAME.EditorTools
                 airStanding.timeParameter = "AirPhase";
             }
 
+            // Rolagem: a descida do pulo em movimento e a rolagem são o MESMO clipe (Falling To Roll), com o tempo vindo de RollPhase. As saídas
+            // do Air para ele vêm antes dos pousos (a primeira transição válida é a usada).
+            AnimatorState roll = null;
+            if (rollClip != null)
+            {
+                roll = machine.AddState("Roll");
+                roll.motion = rollClip;
+                roll.speed = 0f;
+                roll.timeParameterActive = true;
+                roll.timeParameter = "RollPhase";
+
+                AddBoolTransition(air, roll, "RollFall", RollFallFade);
+                AddBoolTransition(air, roll, "Rolling", RollTouchFade);
+            }
+
             // Locomoção -> ar: gatilho de pulo (andando/correndo; ou parado se não há clipe de pulo parado) ou sem chão (queda de borda, que usa o do pulo andando).
             AddJumpTransitions(locomotion, air, airStanding);
 
@@ -712,12 +781,25 @@ namespace PROCEDURAL_GAME.EditorTools
             ActionStates actionStates = BuildActionStates(machine, actionClips);
             AddActionTriggers(locomotion, actionStates);
 
+            // Recuperação do golpe cancelada (PlayerActions): pulo pelo gatilho de sempre; manete inclinada = Attacking desligado no meio do golpe.
+            foreach (AnimatorState attack in new[] { actionStates.hook, actionStates.kick, actionStates.cross })
+            {
+                AddJumpTransitions(attack, air, airStanding, AttackCancelFade);
+
+                AnimatorStateTransition cancel = attack.AddTransition(locomotion);
+                cancel.hasExitTime = false;
+                cancel.hasFixedDuration = true;
+                cancel.duration = AttackCancelFade;
+                cancel.AddCondition(AnimatorConditionMode.IfNot, 0f, "Attacking");
+                cancel.AddCondition(AnimatorConditionMode.Greater, MoveSpeed, "Speed");
+            }
+
             AnimatorStateTransition toFall = locomotion.AddTransition(air);
             toFall.hasExitTime = false;
             toFall.duration = 0.1f;
             toFall.AddCondition(AnimatorConditionMode.IfNot, 0f, "Grounded");
 
-            BuildIdleStates(machine, locomotion, air, airStanding, idles, actionStates, actionClips);
+            BuildIdleStates(machine, locomotion, air, airStanding, roll, idles, actionStates, actionClips);
 
             // IK dos pés (PlayerFootIK): o callback OnAnimatorIK só roda com "IK Pass" ligado na camada.
             AnimatorControllerLayer[] layers = controller.layers;
@@ -732,11 +814,8 @@ namespace PROCEDURAL_GAME.EditorTools
         // Idle: dois estados. Idle0 (o antigo) repete IdleLoops vezes e passa ao Idle1 (Bored, uma vez só), que volta ao Idle0, e assim por diante.
         // Tudo é nativo do Animator (tempo de estado com exit time), sem script e SEM memória: toda entrada em idle vem pelo Idle0, e o tempo
         // do estado recomeça do zero. Mexer-se, pular ou cair sai de qualquer um dos dois. Também liga os estados de ar (pulo/queda).
-        private static void BuildIdleStates(AnimatorStateMachine machine, AnimatorState locomotion, AnimatorState air, AnimatorState airStanding, List<AnimationClip> idles, ActionStates actionStates, ActionClips actionClips)
+        private static void BuildIdleStates(AnimatorStateMachine machine, AnimatorState locomotion, AnimatorState air, AnimatorState airStanding, AnimatorState roll, List<AnimationClip> idles, ActionStates actionStates, ActionClips actionClips)
         {
-            const float StopSpeed = 0.1f;
-            const float MoveSpeed = 0.15f;
-
             AnimatorState[] states = new AnimatorState[idles.Count];
             for (int i = 0; i < idles.Count; i++)
             {
@@ -796,6 +875,14 @@ namespace PROCEDURAL_GAME.EditorTools
             AddLandings(air, locomotion, states[0], StopSpeed, MoveSpeed);
             if (airStanding != null) AddLandings(airStanding, locomotion, states[0], StopSpeed, MoveSpeed);
 
+            // De pé depois da rolagem: para o que a manete pede, com o resto do clipe tocando durante o fade (como no pouso).
+            if (roll != null)
+            {
+                AddRollExit(roll, locomotion).AddCondition(AnimatorConditionMode.Greater, MoveSpeed, "Speed");
+                AddRollExit(roll, states[0]).AddCondition(AnimatorConditionMode.Less, StopSpeed, "Speed");
+                AddRollExit(roll, locomotion);
+            }
+
             // Fim das ações: volta ao idle (se a manete estiver inclinada, o Idle0 sai logo para a locomoção).
             AddExit(actionStates.hook, states[0], actionClips.hook, true);
             AddExit(actionStates.kick, states[0], actionClips.kick, true);
@@ -845,6 +932,13 @@ namespace PROCEDURAL_GAME.EditorTools
             AddTrigger(states.kick, states.hook, "Hook", AttackChainFade);
             AddTrigger(states.cross, states.hook, "Hook", AttackChainFade);
             AddTrigger(states.cross, states.kick, "Kick", AttackChainFade);
+
+            // Durante o fade de um golpe para o seguinte, as saídas do golpe novo (pulo, cancelamento) já valem: o Animator nunca fica
+            // esperando o fade terminar enquanto a física já pulou.
+            foreach (AnimatorState attack in new[] { states.hook, states.kick, states.cross })
+            {
+                foreach (AnimatorStateTransition chain in attack.transitions) chain.interruptionSource = TransitionInterruptionSource.Destination;
+            }
 
             AddExit(states.crouchDown, states.crouchUp, clips.crouchDown);
 
@@ -899,18 +993,21 @@ namespace PROCEDURAL_GAME.EditorTools
             if (interruptible) exit.interruptionSource = TransitionInterruptionSource.Source;
         }
 
+        // Pousos que não rolam (o Air -> Roll vem antes e, por garantia, os pousos exigem "Rolling" desligado).
         private static void AddLandings(AnimatorState airState, AnimatorState locomotion, AnimatorState idleEntry, float stopSpeed, float moveSpeed)
         {
             AnimatorStateTransition toIdle = airState.AddTransition(idleEntry);
             toIdle.hasExitTime = false;
             toIdle.duration = LandingFade;
             toIdle.AddCondition(AnimatorConditionMode.If, 0f, "Landed");
+            toIdle.AddCondition(AnimatorConditionMode.IfNot, 0f, "Rolling");
             toIdle.AddCondition(AnimatorConditionMode.Less, stopSpeed, "Speed");
 
             AnimatorStateTransition toMove = airState.AddTransition(locomotion);
             toMove.hasExitTime = false;
             toMove.duration = LandingFade;
             toMove.AddCondition(AnimatorConditionMode.If, 0f, "Landed");
+            toMove.AddCondition(AnimatorConditionMode.IfNot, 0f, "Rolling");
             toMove.AddCondition(AnimatorConditionMode.Greater, moveSpeed, "Speed");
 
             // Velocidade entre os dois limites (um instante de hesitação da manete): também sai, para a locomoção.
@@ -918,16 +1015,39 @@ namespace PROCEDURAL_GAME.EditorTools
             any.hasExitTime = false;
             any.duration = LandingFade;
             any.AddCondition(AnimatorConditionMode.If, 0f, "Landed");
+            any.AddCondition(AnimatorConditionMode.IfNot, 0f, "Rolling");
+        }
+
+        private static void AddBoolTransition(AnimatorState from, AnimatorState to, string parameter, float duration)
+        {
+            AnimatorStateTransition transition = from.AddTransition(to);
+            transition.hasExitTime = false;
+            transition.hasFixedDuration = true;
+            transition.duration = duration;
+            transition.AddCondition(AnimatorConditionMode.If, 0f, parameter);
+        }
+
+        // Saída da rolagem: só com o corpo no chão e de pé (nem descendo, nem rolando).
+        private static AnimatorStateTransition AddRollExit(AnimatorState roll, AnimatorState to)
+        {
+            AnimatorStateTransition exit = roll.AddTransition(to);
+            exit.hasExitTime = false;
+            exit.hasFixedDuration = true;
+            exit.duration = LandingFade;
+            exit.AddCondition(AnimatorConditionMode.IfNot, 0f, "RollFall");
+            exit.AddCondition(AnimatorConditionMode.IfNot, 0f, "Rolling");
+            return exit;
         }
 
         // Transições de "pulo pedido" a partir de um estado: com clipe de pulo parado, o gatilho vai para o estado certo conforme StandingJump
         // (parado = AirStanding, andando/correndo = Air); sem ele, sempre Air.
-        private static void AddJumpTransitions(AnimatorState from, AnimatorState air, AnimatorState airStanding)
+        // fade > 0: duração única para os dois (saída de um golpe); senão, a de cada pulo.
+        private static void AddJumpTransitions(AnimatorState from, AnimatorState air, AnimatorState airStanding, float fade = 0f)
         {
             AnimatorStateTransition toMoving = from.AddTransition(air);
             toMoving.hasExitTime = false;
             toMoving.hasFixedDuration = true;
-            toMoving.duration = MovingJumpEntryFade;
+            toMoving.duration = fade > 0f ? fade : MovingJumpEntryFade;
             toMoving.AddCondition(AnimatorConditionMode.If, 0f, "Jump");
             if (airStanding != null) toMoving.AddCondition(AnimatorConditionMode.IfNot, 0f, "StandingJump");
 
@@ -936,7 +1056,7 @@ namespace PROCEDURAL_GAME.EditorTools
             AnimatorStateTransition toStanding = from.AddTransition(airStanding);
             toStanding.hasExitTime = false;
             toStanding.hasFixedDuration = true;
-            toStanding.duration = StandingJumpEntryFade;
+            toStanding.duration = fade > 0f ? fade : StandingJumpEntryFade;
             toStanding.AddCondition(AnimatorConditionMode.If, 0f, "Jump");
             toStanding.AddCondition(AnimatorConditionMode.If, 0f, "StandingJump");
         }
@@ -1032,6 +1152,256 @@ namespace PROCEDURAL_GAME.EditorTools
             {
                 if (temp != null) Object.DestroyImmediate(temp);
             }
+        }
+
+        /// <summary>
+        /// Janela do impacto de um golpe (fração 0..1 do clipe): o trecho em que a mão ou o pé que golpeia (o mais rápido em relação ao
+        /// quadril) passa de 50% da velocidade de pico até cair abaixo de 35% dela. Depois disso o golpe está voltando: é a recuperação.
+        /// </summary>
+        private static Vector2 MeasureStrikeWindow(GameObject modelAsset, AnimationClip clip, string label, Vector2 fallback)
+        {
+            const int Samples = 90;
+            HumanBodyBones[] limbs = { HumanBodyBones.LeftHand, HumanBodyBones.RightHand, HumanBodyBones.LeftFoot, HumanBodyBones.RightFoot };
+            string[] limbNames = { "mão esquerda", "mão direita", "pé esquerdo", "pé direito" };
+
+            GameObject temp = null;
+            try
+            {
+                temp = (GameObject)Object.Instantiate(modelAsset);
+                temp.hideFlags = HideFlags.HideAndDontSave;
+
+                Animator probe = temp.GetComponent<Animator>();
+                if (probe == null || !probe.isHuman) throw new System.InvalidOperationException("modelo sem Animator humanoide");
+
+                Transform hips = probe.GetBoneTransform(HumanBodyBones.Hips);
+                Transform[] bones = new Transform[limbs.Length];
+                for (int b = 0; b < limbs.Length; b++)
+                {
+                    bones[b] = probe.GetBoneTransform(limbs[b]);
+                    if (bones[b] == null || hips == null) throw new System.InvalidOperationException("ossos não encontrados");
+                }
+
+                Vector3[,] position = new Vector3[limbs.Length, Samples + 1];
+                for (int i = 0; i <= Samples; i++)
+                {
+                    temp.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+                    clip.SampleAnimation(temp, clip.length * i / Samples);
+                    Vector3 hipsLocal = temp.transform.InverseTransformPoint(hips.position);
+                    for (int b = 0; b < limbs.Length; b++) position[b, i] = temp.transform.InverseTransformPoint(bones[b].position) - hipsLocal;
+                }
+
+                float dt = clip.length / Samples;
+                float Speed(int bone, int i) => (position[bone, i] - position[bone, i - 1]).magnitude / dt;
+
+                int limb = -1;
+                int peak = -1;
+                float peakSpeed = 0f;
+                for (int b = 0; b < limbs.Length; b++)
+                {
+                    for (int i = 1; i <= Samples; i++)
+                    {
+                        float speed = Speed(b, i);
+                        if (speed <= peakSpeed) continue;
+                        peakSpeed = speed;
+                        peak = i;
+                        limb = b;
+                    }
+                }
+
+                if (peakSpeed < 1f) throw new System.InvalidOperationException($"sem movimento rápido de mão ou pé (pico {peakSpeed:0.0} m/s)");
+
+                int start = peak;
+                while (start > 1 && Speed(limb, start - 1) >= 0.5f * peakSpeed) start--;
+
+                int end = peak;
+                while (end < Samples && Speed(limb, end + 1) >= 0.35f * peakSpeed) end++;
+
+                Vector2 window = new Vector2((start - 1f) / Samples, (float)end / Samples);
+                Debug.Log($"Golpe {label}: impacto de {window.x:0.00} a {window.y:0.00} do clipe ({limbNames[limb]}, pico {peakSpeed:0.0} m/s na escala 1); recuperação cancelável a partir de {window.y:0.00}.");
+                return window;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"Não consegui medir o impacto do {label} ({e.Message}); usando {fallback.x:0.00} a {fallback.y:0.00}.");
+                return fallback;
+            }
+            finally
+            {
+                if (temp != null) Object.DestroyImmediate(temp);
+            }
+        }
+
+        private struct RollData
+        {
+            public float impact;
+            public float exit;
+            public AnimationCurve distance;
+            public float naturalSpeed;
+        }
+
+        /// <summary>
+        /// Mede o Falling To Roll: quando o corpo toca o chão (pés que estavam no ar chegam ao chão; sem isso, a descida mais rápida do
+        /// quadril), quando fica de pé de novo (quadril volta a 85% da altura final depois do ponto mais baixo) e quantos metros o corpo
+        /// avança ao longo do clipe (curva RootT do humanoide = centro do corpo, em unidades do avatar). Tudo já na escala do Player.
+        /// </summary>
+        private static RollData MeasureRoll(GameObject modelAsset, AnimationClip clip)
+        {
+            RollData fallback = new RollData { impact = 0.25f, exit = 0.85f, distance = null, naturalSpeed = 4f };
+            const int Samples = 90;
+
+            GameObject temp = null;
+            try
+            {
+                temp = (GameObject)Object.Instantiate(modelAsset);
+                temp.hideFlags = HideFlags.HideAndDontSave;
+
+                Animator probe = temp.GetComponent<Animator>();
+                if (probe == null || !probe.isHuman) throw new System.InvalidOperationException("modelo sem Animator humanoide");
+
+                Transform hips = probe.GetBoneTransform(HumanBodyBones.Hips);
+                Transform left = probe.GetBoneTransform(HumanBodyBones.LeftFoot);
+                Transform right = probe.GetBoneTransform(HumanBodyBones.RightFoot);
+                if (hips == null || left == null || right == null) throw new System.InvalidOperationException("ossos não encontrados");
+
+                float[] hipsY = new float[Samples + 1];
+                float[] feetY = new float[Samples + 1];
+                for (int i = 0; i <= Samples; i++)
+                {
+                    temp.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+                    clip.SampleAnimation(temp, clip.length * i / Samples);
+                    hipsY[i] = temp.transform.InverseTransformPoint(hips.position).y;
+                    feetY[i] = Mathf.Min(temp.transform.InverseTransformPoint(left.position).y, temp.transform.InverseTransformPoint(right.position).y);
+                }
+
+                // Chão = pé mais baixo no fim do clipe (de pé).
+                float ground = float.MaxValue;
+                for (int i = Mathf.FloorToInt(Samples * 0.85f); i <= Samples; i++) ground = Mathf.Min(ground, feetY[i]);
+
+                int impact = -1;
+                bool wasAir = false;
+                for (int i = 0; i <= Samples / 2; i++)
+                {
+                    if (feetY[i] > ground + 0.15f) wasAir = true;
+                    else if (wasAir && feetY[i] <= ground + 0.06f)
+                    {
+                        impact = i;
+                        break;
+                    }
+                }
+
+                string impactSource = "pés";
+                if (impact < 0)
+                {
+                    impactSource = "quadril";
+                    impact = 1;
+                    for (int i = 2; i <= Samples / 2; i++)
+                    {
+                        if (hipsY[i] - hipsY[i - 1] < hipsY[impact] - hipsY[impact - 1]) impact = i;
+                    }
+                }
+
+                int lowest = impact;
+                for (int i = impact; i <= Samples; i++)
+                {
+                    if (hipsY[i] < hipsY[lowest]) lowest = i;
+                }
+
+                float standY = hipsY[Samples];
+                int exit = Samples;
+                for (int i = lowest; i <= Samples; i++)
+                {
+                    if (hipsY[i] >= hipsY[lowest] + 0.85f * (standY - hipsY[lowest]))
+                    {
+                        exit = i;
+                        break;
+                    }
+                }
+
+                RollData data = new RollData
+                {
+                    impact = (float)impact / Samples,
+                    exit = Mathf.Clamp((float)exit / Samples, (float)impact / Samples + 0.1f, 0.97f)
+                };
+
+                if (hipsY[0] - standY > 0.5f)
+                {
+                    Debug.LogWarning($"Falling To Roll: no começo do clipe o quadril está {hipsY[0] - standY:0.00} m acima do de pé (escala 1): a queda pode aparecer alta demais.");
+                }
+
+                data.distance = MeasureRollDistance(clip, probe, data, out data.naturalSpeed, out float angle);
+                if (data.distance == null)
+                {
+                    data.naturalSpeed = fallback.naturalSpeed;
+                    Debug.LogWarning("Falling To Roll parece In Place (o corpo não avança no clipe): a rolagem vai usar o embalo do pouso. Para ela acompanhar a animação, baixe do Mixamo SEM marcar \"In Place\".");
+                }
+                else if (angle > 30f)
+                {
+                    Debug.LogWarning($"Falling To Roll avança {angle:0} graus para o lado da frente do personagem: a rolagem vai na direção do corpo e pode parecer torta.");
+                }
+
+                Debug.Log($"Falling To Roll ({clip.length:0.00} s): toca o chão em {data.impact:0.00} (por {impactSource}), fica de pé em {data.exit:0.00}; " +
+                          $"rolagem a {data.naturalSpeed:0.0} m/s no ritmo do clipe (escala {PlayerScale}).");
+                return data;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"Não consegui medir o Falling To Roll ({e.Message}); usando toque 0,25, de pé 0,85 e o embalo do pouso.");
+                return fallback;
+            }
+            finally
+            {
+                if (temp != null) Object.DestroyImmediate(temp);
+            }
+        }
+
+        // Curva (ponto 0..1 do clipe -> metros para a frente, já na escala do Player, nunca recuando) a partir da posição do centro do corpo
+        // (RootT) no clipe. Null se o corpo não avança (clipe In Place) ou se o clipe não tem essas curvas.
+        private static AnimationCurve MeasureRollDistance(AnimationClip clip, Animator probe, RollData data, out float naturalSpeed, out float angle)
+        {
+            const int Samples = 90;
+            naturalSpeed = 0f;
+            angle = 0f;
+
+            AnimationCurve rootX = AnimationUtility.GetEditorCurve(clip, EditorCurveBinding.FloatCurve(string.Empty, typeof(Animator), "RootT.x"));
+            AnimationCurve rootZ = AnimationUtility.GetEditorCurve(clip, EditorCurveBinding.FloatCurve(string.Empty, typeof(Animator), "RootT.z"));
+            if (rootX == null || rootZ == null) return null;
+
+            // Unidades do avatar -> metros na escala 1. Um valor fora do comum indica avatar ainda não inicializado: vale 1.
+            float humanScale = probe.humanScale;
+            if (humanScale < 0.5f || humanScale > 2f) humanScale = 1f;
+
+            Vector2 At(float phase) => new Vector2(rootX.Evaluate(phase * clip.length), rootZ.Evaluate(phase * clip.length));
+
+            Vector2 travel = At(data.exit) - At(data.impact);
+            if (travel.magnitude * humanScale < 0.15f) return null;
+
+            Vector2 direction = travel.normalized;
+            angle = Vector2.Angle(direction, Vector2.up);
+
+            Vector2 origin = At(0f);
+            Keyframe[] keys = new Keyframe[Samples + 1];
+            float previous = 0f;
+            for (int i = 0; i <= Samples; i++)
+            {
+                float phase = (float)i / Samples;
+                float meters = Vector2.Dot(At(phase) - origin, direction) * humanScale * PlayerScale;
+                previous = Mathf.Max(previous, meters);
+                keys[i] = new Keyframe(phase, previous);
+            }
+
+            // Tangentes lineares: entre amostras o avanço é constante, sem "ondas" da interpolação.
+            for (int i = 0; i <= Samples; i++)
+            {
+                float slopeIn = i > 0 ? (keys[i].value - keys[i - 1].value) / (keys[i].time - keys[i - 1].time) : 0f;
+                float slopeOut = i < Samples ? (keys[i + 1].value - keys[i].value) / (keys[i + 1].time - keys[i].time) : 0f;
+                keys[i].inTangent = slopeIn;
+                keys[i].outTangent = slopeOut;
+            }
+
+            AnimationCurve curve = new AnimationCurve(keys);
+            float rolled = curve.Evaluate(data.exit) - curve.Evaluate(data.impact);
+            naturalSpeed = rolled / Mathf.Max(0.05f, (data.exit - data.impact) * clip.length);
+            return curve;
         }
 
         private static AnimationClip FindClipByName(string fbxPath, string clipName)

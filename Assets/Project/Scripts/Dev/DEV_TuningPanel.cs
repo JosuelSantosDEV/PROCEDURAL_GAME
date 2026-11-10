@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using PROCEDURAL_GAME.CameraControl;
 using PROCEDURAL_GAME.Player;
 using PROCEDURAL_GAME.UI;
 using PROCEDURAL_GAME.World;
@@ -145,6 +146,7 @@ namespace PROCEDURAL_GAME.DevTools
                 UiKit.SetLayout(lake.gameObject, preferredHeight: 90f, flexibleWidth: 1f);
             }
 
+            DEV_BuildCamera();
             DEV_BuildSurvival();
 
             // Para medir no aparelho quanto a variação da textura do chão custa. É global: vale até fechar o jogo.
@@ -160,6 +162,22 @@ namespace PROCEDURAL_GAME.DevTools
             }
 
             foreach (ScatterProfile profile in profiles) DEV_BuildProfile(profile);
+        }
+
+        // Câmera da 3ª pessoa: para achar a distância e a altura ideais no aparelho. Vale só nesta partida; COPIAR VALORES leva os números.
+        // Com o painel aberto o tempo está parado, mas a câmera já muda de lugar na hora.
+        private void DEV_BuildCamera()
+        {
+            PlayerCameraController cam = FindObjectOfType<PlayerCameraController>();
+            if (cam == null) return;
+
+            Text section = UiKit.CreateText(content, "Section", "CÂMERA (3ª PESSOA)", 30, TextAnchor.LowerLeft, UiKit.MutedTextColor);
+            UiKit.SetLayout(section.gameObject, preferredHeight: 56f);
+
+            DEV_CreateStepper("Distância (m)", cam.ThirdPersonDistance, "0.0", new[] { -1f, -0.5f }, new[] { 0.5f, 1f },
+                v => cam.ThirdPersonDistance = v, () => cam.ThirdPersonDistance, false);
+            DEV_CreateStepper("Altura (m)", cam.PivotHeight, "0.0", new[] { -0.5f, -0.1f }, new[] { 0.1f, 0.5f },
+                v => cam.PivotHeight = v, () => cam.PivotHeight, false);
         }
 
         // Sobrevivência: ainda não há comida no mundo nem ataques; estes botões testam o que depende deles. Só em jogo.
@@ -255,7 +273,8 @@ namespace PROCEDURAL_GAME.DevTools
         }
 
         /// <summary>Linha "rótulo  [-a][-b]  valor  [+c][+d]". Cada botão soma o passo e refaz o mundo.</summary>
-        private void DEV_CreateStepper(string label, float current, string format, float[] downSteps, float[] upSteps, Action<float> set, Func<float> get)
+        // repopulate: refazer os objetos do mundo a cada passo (só para os ajustes de árvores).
+        private void DEV_CreateStepper(string label, float current, string format, float[] downSteps, float[] upSteps, Action<float> set, Func<float> get, bool repopulate = true)
         {
             RectTransform row = UiKit.CreateRect(content, "Stepper");
             UiKit.AddHorizontalLayout(row.gameObject, 10f, TextAnchor.MiddleCenter);
@@ -271,7 +290,7 @@ namespace PROCEDURAL_GAME.DevTools
             {
                 set(get() + delta);
                 value.text = get().ToString(format, CultureInfo.InvariantCulture);
-                DEV_Apply();
+                if (repopulate) DEV_Apply();
             }
 
             // Ordem visual: menos grande, menos pequeno, valor, mais pequeno, mais grande.
@@ -336,6 +355,13 @@ namespace PROCEDURAL_GAME.DevTools
         private void DEV_CopyValues()
         {
             StringBuilder text = new StringBuilder();
+            PlayerCameraController cam = FindObjectOfType<PlayerCameraController>();
+            if (cam != null)
+            {
+                text.Append(string.Format(CultureInfo.InvariantCulture, "Camera 3a pessoa: distancia {0:0.0} m, altura {1:0.0} m\n",
+                    cam.ThirdPersonDistance, cam.PivotHeight));
+            }
+
             foreach (ScatterProfile profile in DEV_TunableProfiles()) text.Append(DEV_TuningStore.Instance.DEV_BuildReport(profile));
 
             GUIUtility.systemCopyBuffer = text.ToString();

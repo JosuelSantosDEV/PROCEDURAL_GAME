@@ -10,10 +10,13 @@ namespace PROCEDURAL_GAME.MobileInput
     /// Fica no Canvas; o <c>PlayerInputReader</c> lê daqui junto com teclado/mouse/gamepad.
     /// Para um novo botão (ex.: ataque), adicione um <see cref="TouchButton"/> aqui.
     /// O botão de correr é liga/desliga: um toque liga, outro desliga, e o dedo fica livre para girar a câmera.
+    /// Visual em preto e cinza (<see cref="TouchControlPalette"/>): os botões piscam sozinhos ao toque (<see cref="TouchButton"/>); o
+    /// joystick clareia enquanto o dedo está nele.
     /// </summary>
     public class MobileControls : MonoBehaviour
     {
-        private static readonly Color SprintOnColor = new Color(1f, 0.6f, 0.1f, 0.75f);
+        // Tempo (s) para o joystick clarear ao tocar / voltar ao soltar.
+        private const float JoystickFadeSeconds = 0.12f;
 
         [SerializeField] private JoystickController joystick;
         [SerializeField] private TouchLookArea lookArea;
@@ -23,8 +26,10 @@ namespace PROCEDURAL_GAME.MobileInput
         [SerializeField] private TouchButton attackButton;
 
         private CanvasGroup canvasGroup;
-        private Image sprintFill;
-        private Color sprintOffColor;
+        private Image joystickBase;
+        private Image joystickHandle;
+        private bool joystickTouched;
+        private float joystickGlow;
 
         /// <summary>Direção do joystick, cada eixo entre -1 e 1.</summary>
         public Vector2 Move => joystick != null ? joystick.InputDirection : Vector2.zero;
@@ -46,20 +51,40 @@ namespace PROCEDURAL_GAME.MobileInput
             canvasGroup = GetComponent<CanvasGroup>();
             if (canvasGroup == null) canvasGroup = gameObject.AddComponent<CanvasGroup>();
 
-            if (sprintButton == null) return;
+            if (joystick != null)
+            {
+                if (joystick.joystickBase != null) joystickBase = joystick.joystickBase.GetComponent<Image>();
+                if (joystick.handle != null) joystickHandle = joystick.handle.GetComponent<Image>();
+            }
 
-            sprintFill = sprintButton.GetComponent<Image>();
-            if (sprintFill != null) sprintOffColor = sprintFill.color;
+            ApplyJoystickColors();
         }
 
         private void OnEnable()
         {
             if (sprintButton != null) sprintButton.Pressed += ToggleSprint;
+
+            if (joystick != null)
+            {
+                joystick.OnTouchPressed += OnJoystickPressed;
+                joystick.OnTouchRemoved += OnJoystickRemoved;
+            }
         }
 
         private void OnDisable()
         {
             if (sprintButton != null) sprintButton.Pressed -= ToggleSprint;
+
+            if (joystick != null)
+            {
+                joystick.OnTouchPressed -= OnJoystickPressed;
+                joystick.OnTouchRemoved -= OnJoystickRemoved;
+            }
+
+            // O "soltar" pode não chegar com o objeto desligado.
+            joystickTouched = false;
+            joystickGlow = 0f;
+            ApplyJoystickColors();
         }
 
         // Confere todo frame: a transparência pode mudar no menu de pausa.
@@ -67,15 +92,32 @@ namespace PROCEDURAL_GAME.MobileInput
         {
             float opacity = ControlSettings.ControlsOpacity;
             if (!Mathf.Approximately(canvasGroup.alpha, opacity)) canvasGroup.alpha = opacity;
+
+            float target = joystickTouched ? 1f : 0f;
+            if (!Mathf.Approximately(joystickGlow, target))
+            {
+                joystickGlow = Mathf.MoveTowards(joystickGlow, target, Time.unscaledDeltaTime / JoystickFadeSeconds);
+                ApplyJoystickColors();
+            }
+        }
+
+        private void OnJoystickPressed() => joystickTouched = true;
+
+        private void OnJoystickRemoved() => joystickTouched = false;
+
+        private void ApplyJoystickColors()
+        {
+            if (joystickBase != null) joystickBase.color = Color.Lerp(TouchControlPalette.JoystickBase, TouchControlPalette.JoystickBaseActive, joystickGlow);
+            if (joystickHandle != null) joystickHandle.color = Color.Lerp(TouchControlPalette.JoystickHandle, TouchControlPalette.JoystickHandleActive, joystickGlow);
         }
 
         private void ToggleSprint() => SetSprint(!SprintOn);
 
-        /// <summary>Liga ou desliga a corrida, com a cor do botão junto.</summary>
+        /// <summary>Liga ou desliga a corrida, com o visual do botão junto.</summary>
         public void SetSprint(bool on)
         {
             SprintOn = on;
-            if (sprintFill != null) sprintFill.color = on ? SprintOnColor : sprintOffColor;
+            if (sprintButton != null) sprintButton.SetToggled(on);
         }
     }
 }

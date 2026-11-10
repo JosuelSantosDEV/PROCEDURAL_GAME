@@ -1,3 +1,4 @@
+using PROCEDURAL_GAME.MobileInput;
 using PROCEDURAL_GAME.Player;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -66,7 +67,24 @@ namespace PROCEDURAL_GAME.UI
             UiKit.Anchor((RectTransform)interact.transform, new Vector2(1f, 0f), new Vector2(-90f, 320f), new Vector2(220f, 110f));
             interactButton = interact.gameObject;
             interactLabel = interact.GetComponentInChildren<Text>();
+            StyleAsTouchControl(interact);
             interactButton.SetActive(false);
+        }
+
+        // Mesmo visual dos controles de toque (preto e cinza) e o mesmo clarão ao tocar. No celular o estado "destacado" ficaria preso
+        // depois do toque: fica igual ao normal.
+        private static void StyleAsTouchControl(Button button)
+        {
+            ColorBlock colors = button.colors;
+            colors.normalColor = TouchControlPalette.ButtonFill;
+            colors.highlightedColor = TouchControlPalette.ButtonFill;
+            colors.selectedColor = TouchControlPalette.ButtonFill;
+            colors.pressedColor = TouchControlPalette.FlashFill;
+            colors.fadeDuration = 0.08f;
+            button.colors = colors;
+
+            Text label = button.GetComponentInChildren<Text>();
+            if (label != null) label.color = TouchControlPalette.ButtonLabel;
         }
 
         private void OnDestroy()

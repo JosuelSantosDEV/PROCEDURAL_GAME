@@ -23,10 +23,14 @@ namespace PROCEDURAL_GAME.Player
         private static readonly int MoveYId = Animator.StringToHash("MoveY");
         private static readonly int AirPhaseId = Animator.StringToHash("AirPhase");
         private static readonly int StandingJumpId = Animator.StringToHash("StandingJump");
+        private static readonly int RollFallId = Animator.StringToHash("RollFall");
+        private static readonly int RollingId = Animator.StringToHash("Rolling");
+        private static readonly int RollPhaseId = Animator.StringToHash("RollPhase");
 
         // Nomes dos estados de ar no Animator Controller (PlayerBuilder).
         private static readonly int AirStateHash = Animator.StringToHash("Air");
         private static readonly int AirStandingStateHash = Animator.StringToHash("AirStanding");
+        private static readonly int RollStateHash = Animator.StringToHash("Roll");
 
         // Velocidade (m/s, sem suavização) abaixo da qual o Player conta como parado / acima da qual conta como andando.
         private const float RestSpeed = 0.05f;
@@ -117,6 +121,8 @@ namespace PROCEDURAL_GAME.Player
         private float windUpEnd;
         private float windUpSeconds;
         private float moveTime;
+        private float rollPose;
+        private bool hasRollParameters;
 
         private void Awake()
         {
@@ -132,18 +138,23 @@ namespace PROCEDURAL_GAME.Player
 
             // O movimento é do CharacterController; a animação não pode empurrar o Player (root motion).
             animator.applyRootMotion = false;
+
+            // Controller antigo (antes de rodar o menu de novo): sem os parâmetros da rolagem, não os escreve (evita avisos todo frame).
+            hasRollParameters = HasParameter(animator, RollPhaseId) && HasParameter(animator, RollingId) && HasParameter(animator, RollFallId);
         }
 
         private void OnEnable()
         {
             movement.Jumped += OnJumped;
             movement.WindUpStarted += OnWindUpStarted;
+            movement.RollEnded += OnRollEnded;
         }
 
         private void OnDisable()
         {
             movement.Jumped -= OnJumped;
             movement.WindUpStarted -= OnWindUpStarted;
+            movement.RollEnded -= OnRollEnded;
         }
 
         private void Update()
@@ -175,7 +186,8 @@ namespace PROCEDURAL_GAME.Player
 
             // Speed só decide as transições idle <-> locomoção (com histerese): sem suavização, para sair do movimento no mesmo frame.
             // A marcha (Gait) mistura as poses: sobe suave e desce mais rápido.
-            animator.SetFloat(SpeedId, animated);
+            // Rolando: o que decide a saída da rolagem (parado ou andando) é o que a manete pede, não a velocidade da rolagem.
+            animator.SetFloat(SpeedId, movement.IsRolling ? movement.RequestedSpeed : animated);
             UpdateGait(GetGait(animated), dt);
 
             // Ritmo dos passos = velocidade da animação / velocidade natural do clipe naquela faixa (entre andar e correr interpola): sem deslizar.
@@ -196,9 +208,12 @@ namespace PROCEDURAL_GAME.Player
             animator.SetBool(GroundedId, grounded);
 
             UpdateAir(grounded, dt);
+            UpdateRoll(dt);
 
-            // Novo pulo só depois de a animação terminar: no ar e durante todo o fade do pouso, os toques são descartados.
-            movement.JumpAllowed = !airActive && !IsInAirState();
+            // Novo pulo (e ataque, que usa a mesma regra) só depois de a animação terminar: no ar, rolando e durante todo o fade do pouso
+            // ou da saída da rolagem os toques são descartados. Um gatilho disparado com o Animator nesses estados ficaria guardado e sairia
+            // atrasado em relação à física.
+            movement.JumpAllowed = !airActive && !movement.IsRolling && !movement.RollArmed && !IsInAirState();
         }
 
         private bool IsInAirState()
@@ -207,7 +222,53 @@ namespace PROCEDURAL_GAME.Player
             return animator.IsInTransition(0) && IsAirHash(animator.GetNextAnimatorStateInfo(0).shortNameHash);
         }
 
-        private static bool IsAirHash(int hash) => hash == AirStateHash || hash == AirStandingStateHash;
+        private static bool IsAirHash(int hash) => hash == AirStateHash || hash == AirStandingStateHash || hash == RollStateHash;
+
+        /// <summary>
+        /// Pulo em movimento que termina rolando (clipe Falling To Roll). Descendo, a pose do começo do clipe (queda) segue a velocidade
+        /// vertical, do ápice até o ponto em que o corpo toca o chão; no chão, o ponto do clipe é o MESMO que o PlayerMovement usa para o
+        /// deslocamento (pose e movimento juntos). Depois de ficar de pé, o resto do clipe toca durante o fade para andar/parado.
+        /// </summary>
+        private void UpdateRoll(float dt)
+        {
+            if (!hasRollParameters) return;
+
+            // Sem checar o chão: no frame em que o corpo toca o chão a rolagem só começa no frame seguinte (PlayerMovement), e "descendo"
+            // tem de valer até lá, senão o Animator veria um frame sem descida nem rolagem e sairia do estado.
+            bool fall = movement.RollArmed && movement.VerticalVelocity < 0f;
+
+            if (movement.IsRolling)
+            {
+                rollPose = movement.RollPhase;
+            }
+            else if (fall)
+            {
+                float v0 = Mathf.Max(1f, movement.JumpVelocity);
+                rollPose = Mathf.Lerp(0f, movement.RollImpactPhase, Mathf.Clamp01(-movement.VerticalVelocity / v0));
+            }
+            else if (movement.RollClipLength > 0f)
+            {
+                rollPose = Mathf.MoveTowards(rollPose, 1f, dt * movement.RollPlayback / movement.RollClipLength);
+            }
+
+            animator.SetBool(RollFallId, fall);
+            animator.SetBool(RollingId, movement.IsRolling);
+            animator.SetFloat(RollPhaseId, rollPose);
+        }
+
+        /// <summary>O Animator Controller tem este parâmetro?</summary>
+        public static bool HasParameter(Animator target, int nameHash)
+        {
+            foreach (AnimatorControllerParameter parameter in target.parameters)
+            {
+                if (parameter.nameHash == nameHash) return true;
+            }
+
+            return false;
+        }
+
+        // De pé depois da rolagem: a marcha sobe como num pouso, junto com o fade da saída.
+        private void OnRollEnded() => gaitRampEnd = Time.time + landingGaitRamp;
 
         // Marcha (Gait). No ar fica em zero (uma corrida esperando pronta entrava de uma vez ao tocar o chão); ao pousar sobe em landingGaitRamp,
         // junto com o fade do pouso. Um ressalto curto do terreno correndo não interrompe a marcha.
@@ -215,7 +276,7 @@ namespace PROCEDURAL_GAME.Player
         {
             float current = animator.GetFloat(GaitId);
 
-            if (airActive && IsRealAir())
+            if ((airActive && IsRealAir()) || movement.IsRolling)
             {
                 animator.SetFloat(GaitId, 0f, stopDamping, dt);
             }

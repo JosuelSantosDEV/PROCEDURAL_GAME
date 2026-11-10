@@ -25,7 +25,6 @@ namespace PROCEDURAL_GAME.EditorTools
         private static readonly Vector2 ReferenceResolution = new Vector2(1920f, 1080f);
         // Centro do joystick em repouso, em unidades do Canvas contadas a partir do canto inferior esquerdo da tela.
         private static readonly Vector2 JoystickRestPosition = new Vector2(300f, 300f);
-        private static readonly Color ButtonFill = new Color(1f, 1f, 1f, 0.3f);
 
         [MenuItem("PROCEDURAL_GAME/Create Mobile Controls")]
         public static void Build()
@@ -132,11 +131,11 @@ namespace PROCEDURAL_GAME.EditorTools
             joystickBase.anchorMax = Vector2.zero;
             joystickBase.anchoredPosition = JoystickRestPosition;
             joystickBase.sizeDelta = new Vector2(260f, 260f);
-            AddImage(joystickBase, ring, new Color(1f, 1f, 1f, 0.6f), raycastTarget: false);
+            AddImage(joystickBase, ring, TouchControlPalette.JoystickBase, raycastTarget: false);
 
             RectTransform handle = CreateRect("Handle", joystickBase);
             handle.sizeDelta = new Vector2(120f, 120f);
-            AddImage(handle, thumbSprite, new Color(1f, 1f, 1f, 0.8f), raycastTarget: false);
+            AddImage(handle, thumbSprite, TouchControlPalette.JoystickHandle, raycastTarget: false);
 
             JoystickController joystick = zone.gameObject.AddComponent<JoystickController>();
             joystick.joystickBase = joystickBase;
@@ -166,11 +165,12 @@ namespace PROCEDURAL_GAME.EditorTools
             button.anchorMax = anchor;
             button.anchoredPosition = position;
             button.sizeDelta = new Vector2(size, size);
-            AddImage(button, fill, ButtonFill, raycastTarget: true);
+            // Tons de preto e cinza; o piscar ao toque é do TouchButton.
+            AddImage(button, fill, TouchControlPalette.ButtonFill, raycastTarget: true);
 
             RectTransform border = CreateRect("Ring", button);
             Stretch(border, Vector2.zero, Vector2.one);
-            AddImage(border, ring, new Color(1f, 1f, 1f, 0.8f), raycastTarget: false);
+            AddImage(border, ring, TouchControlPalette.ButtonRing, raycastTarget: false);
 
             RectTransform text = CreateRect("Label", button);
             Stretch(text, Vector2.zero, Vector2.one);
@@ -181,7 +181,7 @@ namespace PROCEDURAL_GAME.EditorTools
             labelText.alignment = TextAnchor.MiddleCenter;
             labelText.horizontalOverflow = HorizontalWrapMode.Overflow;
             labelText.verticalOverflow = VerticalWrapMode.Overflow;
-            labelText.color = Color.white;
+            labelText.color = TouchControlPalette.ButtonLabel;
             labelText.raycastTarget = false;
 
             return button.gameObject.AddComponent<TouchButton>();

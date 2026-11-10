@@ -111,6 +111,25 @@ namespace PROCEDURAL_GAME.CameraControl
 
         public CameraMode Mode => mode;
 
+        /// <summary>Distância normal da câmera em 3ª pessoa (m). Mudar em jogo vale na hora (a ferramenta DEV usa para calibrar).</summary>
+        public float ThirdPersonDistance
+        {
+            get => thirdPersonDistance;
+            set
+            {
+                thirdPersonDistance = Mathf.Max(0.5f, value);
+                currentDistance = thirdPersonDistance;
+                distanceVelocity = 0f;
+            }
+        }
+
+        /// <summary>Altura do ponto que a câmera orbita em 3ª pessoa, acima do pivô do Player (m).</summary>
+        public float PivotHeight
+        {
+            get => pivotHeight;
+            set => pivotHeight = Mathf.Max(0f, value);
+        }
+
         private void Awake()
         {
             if (target == null)

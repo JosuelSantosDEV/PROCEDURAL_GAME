@@ -157,7 +157,9 @@ namespace PROCEDURAL_GAME.Player
             if (!ready || layerIndex != 0) return;
 
             float dt = Time.deltaTime;
-            bool wantIk = animator.GetBool(GroundedId) && Time.time >= airUntil;
+            // Rolando, o corpo gira no chão: prender os pés puxaria as pernas.
+            bool rolling = movement != null && movement.IsRolling;
+            bool wantIk = animator.GetBool(GroundedId) && Time.time >= airUntil && !rolling;
             ikWeight = Mathf.MoveTowards(ikWeight, wantIk ? 1f : 0f, (wantIk ? landFadeSpeed : fadeSpeed) * dt);
 
             // Pivô do modelo: onde as animações supõem que o chão está (com o corpo já abaixado) e onde ele estaria sem o ajuste.
