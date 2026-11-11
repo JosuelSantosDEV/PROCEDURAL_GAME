@@ -26,7 +26,6 @@ namespace PROCEDURAL_GAME.Player
         private static readonly int RollFallId = Animator.StringToHash("RollFall");
         private static readonly int RollingId = Animator.StringToHash("Rolling");
         private static readonly int RollPhaseId = Animator.StringToHash("RollPhase");
-        private static readonly int FallBlendId = Animator.StringToHash("FallBlend");
         private static readonly int SwimmingId = Animator.StringToHash("Swimming");
         private static readonly int SwimBlendId = Animator.StringToHash("SwimBlend");
         private static readonly int SwimSpeedId = Animator.StringToHash("SwimSpeed");
@@ -93,11 +92,9 @@ namespace PROCEDURAL_GAME.Player
 
         [SerializeField, Range(0f, 1f)] private float standingLandPhase = 0.75f;
 
-        [Header("Poses no ar do pulo com rolagem")]
-        [Tooltip("Ajuste de altura (m, já na escala) das poses no ar (Male Dynamic Pose 1 e 2) para o quadril ficar na altura do quadril no ápice do pulo: a troca de pose no ápice não sobe nem desce o corpo. Medido pelo menu.")]
-        [SerializeField] private float fallPose1Lift;
-
-        [SerializeField] private float fallPose2Lift;
+        [Header("Pose no ar do pulo com rolagem")]
+        [Tooltip("Ajuste de altura (m, já na escala) da pose no ar (Male Dynamic Pose 1) para o quadril ficar na altura do quadril no ápice do pulo: a troca de pose no ápice não sobe nem desce o corpo. Medido pelo menu.")]
+        [SerializeField] private float fallPoseLift;
 
         [Header("Natação")]
         [Tooltip("Quanto o corpo sobe (m, já na escala) na pose de nadar para a frente, para a cabeça ficar na superfície como na pose de boiar. Medido pelo menu.")]
@@ -157,8 +154,6 @@ namespace PROCEDURAL_GAME.Player
         private float rollPose;
         private bool hasRollParameters;
         private bool hasSwimParameters;
-        private bool hasFallBlend;
-        private float fallBlend;
         private PlayerFootIK footIk;
         private bool wasSwimming;
         private float swimBlend;
@@ -182,7 +177,6 @@ namespace PROCEDURAL_GAME.Player
 
             // Controller antigo (antes de rodar o menu de novo): sem os parâmetros da rolagem, não os escreve (evita avisos todo frame).
             hasRollParameters = HasParameter(animator, RollPhaseId) && HasParameter(animator, RollingId) && HasParameter(animator, RollFallId);
-            hasFallBlend = HasParameter(animator, FallBlendId);
             hasSwimParameters = HasParameter(animator, SwimmingId) && HasParameter(animator, SwimBlendId) && HasParameter(animator, SwimSpeedId);
             footIk = animator.GetComponent<PlayerFootIK>();
         }
@@ -249,8 +243,9 @@ namespace PROCEDURAL_GAME.Player
 
             // Speed só decide as transições idle <-> locomoção (com histerese): sem suavização, para sair do movimento no mesmo frame.
             // A marcha (Gait) mistura as poses: sobe suave e desce mais rápido.
-            // Rolando: o que decide a saída da rolagem (parado ou andando) é o que a manete pede, não a velocidade da rolagem.
-            animator.SetFloat(SpeedId, movement.IsRolling ? movement.RequestedSpeed : animated);
+            // No ar e rolando: o destino do pouso / da saída da rolagem (parado ou andando) é o que a manete pede, não o embalo do salto.
+            // airActive ainda é o do frame anterior: no frame do toque no chão vale o pedido da manete.
+            animator.SetFloat(SpeedId, movement.IsRolling || airActive ? movement.RequestedSpeed : animated);
             UpdateGait(GetGait(animated), dt);
 
             // Ritmo dos passos = velocidade da animação / velocidade natural do clipe naquela faixa (entre andar e correr interpola): sem deslizar.
@@ -307,10 +302,7 @@ namespace PROCEDURAL_GAME.Player
             }
             else if (fall)
             {
-                // No ar o corpo está nas poses (AirPose): pose 1 no ápice, pose 2 com a velocidade de queda de um pouso no plano (queda mais
-                // longa fica nela). A rolagem fica pronta no ponto do impacto, para entrar no toque.
-                float v0 = Mathf.Max(1f, movement.JumpVelocity);
-                fallBlend = Mathf.Clamp01(-movement.VerticalVelocity / v0);
+                // No ar o corpo está na pose (AirPose). A rolagem fica pronta no ponto do impacto, para entrar no toque.
                 rollPose = movement.RollImpactPhase;
             }
             else if (movement.RollClipLength > 0f)
@@ -321,7 +313,6 @@ namespace PROCEDURAL_GAME.Player
             animator.SetBool(RollFallId, fall);
             animator.SetBool(RollingId, movement.IsRolling);
             animator.SetFloat(RollPhaseId, rollPose);
-            if (hasFallBlend) animator.SetFloat(FallBlendId, fallBlend);
         }
 
         // Na água: boiar (parado) <-> nadar (em movimento), ritmo da braçada pela velocidade. Nada de marcha, ar ou pouso.
@@ -359,7 +350,7 @@ namespace PROCEDURAL_GAME.Player
 
         /// <summary>
         /// Ajustes do corpo inteiro (no objeto Model, aplicados pelo PlayerFootIK) na proporção em que cada pose aparece, contando o fade em
-        /// andamento: a altura das poses no ar (quadril na altura do ápice do pulo), a altura da pose de nadar (cabeça na superfície
+        /// andamento: a altura da pose no ar (quadril na altura do ápice do pulo), a altura da pose de nadar (cabeça na superfície
         /// como ao boiar) e a inclinação debaixo d'água.
         /// </summary>
         private void UpdateBodyOffset(float dt)
@@ -367,7 +358,7 @@ namespace PROCEDURAL_GAME.Player
             if (footIk == null) return;
 
             float lift = 0f;
-            lift += Mathf.Lerp(fallPose1Lift, fallPose2Lift, fallBlend) * StateWeight(AirPoseStateHash);
+            lift += fallPoseLift * StateWeight(AirPoseStateHash);
 
             float swimWeight = StateWeight(SwimStateHash);
             lift += swimForwardLift * swimBlend * swimWeight;

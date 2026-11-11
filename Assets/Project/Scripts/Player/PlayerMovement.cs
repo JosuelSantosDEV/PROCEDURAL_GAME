@@ -39,6 +39,13 @@ namespace PROCEDURAL_GAME.Player
         [Tooltip("Gravidade só durante o pulo em movimento (m/s², negativa). Mais fraca = saída do chão com menos velocidade, subida mais suave.")]
         [SerializeField] private float movingJumpGravity = -11f;
 
+        [Header("No ar")]
+        [Tooltip("No ar a manete muda a velocidade horizontal com esta aceleração (m/s²): dá para corrigir a direção, mas o salto tem embalo. Soltar a manete NÃO para o corpo no ar.")]
+        [SerializeField, Min(0f)] private float airAcceleration = 8f;
+
+        [Tooltip("Pulo PARADO: o corpo sai para a frente com esta velocidade (m/s). Menor que a de andar: o pulo em movimento vai mais longe.")]
+        [SerializeField, Min(0f)] private float standingJumpForwardSpeed = 2.5f;
+
         [Header("Gravidade")]
         [Tooltip("Aceleração da gravidade (negativa = para baixo), em m/s².")]
         [SerializeField] private float gravity = -20f;
@@ -71,6 +78,9 @@ namespace PROCEDURAL_GAME.Player
 
         [Tooltip("Ritmo da rolagem (1 = o do clipe) acompanha a velocidade do pouso dentro destes limites: correndo rola mais rápido e mais longe.")]
         [SerializeField] private Vector2 rollPlaybackRange = new Vector2(0.85f, 1.3f);
+
+        [Tooltip("Rolando, o corpo vira para onde a manete aponta com esta velocidade (graus/s) e a rolagem segue a frente do corpo.")]
+        [SerializeField, Min(0f)] private float rollTurnSpeed = 240f;
 
         [Tooltip("Só rola se, ao pular, a velocidade era pelo menos esta fração da de andar (uma esticada leve da manete pousa normal).")]
         [SerializeField, Range(0f, 1f)] private float rollMinSpeedFraction = 0.5f;
@@ -144,6 +154,8 @@ namespace PROCEDURAL_GAME.Player
         private float rollPlayback = 1f;
         private float rollLandingSpeed;
         private Vector3 rollDirection;
+        private Vector3 airVelocity;
+        private bool airborne;
 
         /// <summary>
         /// Em primeira pessoa o corpo olha para onde a câmera olha (e o Player anda de frente, de ré e de lado); em terceira o corpo vira
@@ -289,9 +301,10 @@ namespace PROCEDURAL_GAME.Player
 
             if (rolling)
             {
-                // A direção da rolagem foi decidida ao tocar o chão.
+                // Rolando dá para virar: a rolagem segue a frente do corpo.
                 turningToCamera = false;
                 turnInPlace = 0;
+                RotateDuringRoll();
             }
             else if (ActionLocked)
             {
@@ -329,7 +342,20 @@ namespace PROCEDURAL_GAME.Player
             // Preso a uma ação ou preparando o pulo parado: o corpo não desliza, mesmo com a manete inclinada.
             if (ActionLocked || windingUp) return Vector3.zero;
 
-            return desired;
+            // No chão a velocidade é a da manete (e vira o embalo se o corpo sair do chão: pulo ou borda).
+            if (!airborne && controller.isGrounded)
+            {
+                airVelocity = desired;
+                return desired;
+            }
+
+            // No ar: o embalo continua; a manete só corrige, com aceleração limitada. Soltar a manete não para o corpo.
+            if (move.sqrMagnitude > 0.01f && Time.deltaTime > 0f)
+            {
+                airVelocity = Vector3.MoveTowards(airVelocity, desired, airAcceleration * Time.deltaTime);
+            }
+
+            return airVelocity;
         }
 
         // ------------------------------------------------------------------------------------------------- natação
@@ -381,6 +407,8 @@ namespace PROCEDURAL_GAME.Player
         {
             swimming = false;
             submerged = false;
+            airborne = false;
+            airVelocity = Vector3.zero;
             verticalVelocity = 0f;
             ResetJumpPhysics();
         }
@@ -509,6 +537,10 @@ namespace PROCEDURAL_GAME.Player
                 meters = rollLandingSpeed * (1f - progress) * dt;
             }
 
+            // Segue a frente atual do corpo (o jogador pode virar durante a rolagem).
+            Vector3 forward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            if (forward.sqrMagnitude > 0.0001f) rollDirection = forward.normalized;
+
             velocity = rollDirection * (Mathf.Max(0f, meters) / dt);
             return true;
         }
@@ -517,6 +549,16 @@ namespace PROCEDURAL_GAME.Player
                                       rollDistance.Evaluate(rollExitPhase) - rollDistance.Evaluate(rollImpactPhase) > 0.3f;
 
         private bool CanRoll => rollAfterMovingJump && rollClipLength > 0f && !FaceCamera;
+
+        // Rolando: o corpo vira para onde a manete aponta (3ª pessoa; a rolagem não existe em 1ª).
+        private void RotateDuringRoll()
+        {
+            Vector3 direction = ToCameraSpace(input.Move);
+            if (direction.sqrMagnitude < 0.01f) return;
+
+            Quaternion target = Quaternion.LookRotation(direction);
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, target, rollTurnSpeed * Time.deltaTime);
+        }
 
         private void StartRoll()
         {
@@ -552,6 +594,7 @@ namespace PROCEDURAL_GAME.Player
             {
                 verticalVelocity = groundedStickVelocity;
                 ResetJumpPhysics();
+                airborne = false;
 
                 // Pousou de um pulo em movimento: rola. Trocou para a 1ª pessoa no ar: pousa normal.
                 if (rollArmed)
@@ -574,7 +617,7 @@ namespace PROCEDURAL_GAME.Player
                 else if (windUpTimer <= 0f)
                 {
                     windingUp = false;
-                    Launch(jumpHeight, gravity);
+                    LaunchStanding();
                 }
             }
             else if (isGrounded && JumpAllowed && !ActionLocked && !rolling && jumpPressed)
@@ -594,15 +637,26 @@ namespace PROCEDURAL_GAME.Player
                 }
                 else
                 {
-                    Launch(jumpHeight, gravity);
+                    LaunchStanding();
                 }
             }
 
             verticalVelocity += activeGravity * Time.deltaTime;
         }
 
+        // Pulo parado: também sai do lugar, para a frente do corpo, mais curto que o pulo em movimento.
+        private void LaunchStanding()
+        {
+            Vector3 forward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            airVelocity = forward.sqrMagnitude > 0.0001f ? forward.normalized * standingJumpForwardSpeed : Vector3.zero;
+            Launch(jumpHeight, gravity);
+        }
+
         private void Launch(float height, float jumpGravity)
         {
+            // O embalo do salto: no pulo em movimento, a velocidade de agora (o parado já definiu a dele).
+            if (horizontalSpeed > StandingSpeed) airVelocity = horizontalVelocity;
+            airborne = true;
             activeGravity = jumpGravity;
             activeJumpVelocity = GetJumpVelocity(height, jumpGravity);
             verticalVelocity = activeJumpVelocity;
