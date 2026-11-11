@@ -26,11 +26,15 @@ namespace PROCEDURAL_GAME.Player
         private static readonly int RollFallId = Animator.StringToHash("RollFall");
         private static readonly int RollingId = Animator.StringToHash("Rolling");
         private static readonly int RollPhaseId = Animator.StringToHash("RollPhase");
+        private static readonly int SwimmingId = Animator.StringToHash("Swimming");
+        private static readonly int SwimBlendId = Animator.StringToHash("SwimBlend");
+        private static readonly int SwimSpeedId = Animator.StringToHash("SwimSpeed");
 
         // Nomes dos estados de ar no Animator Controller (PlayerBuilder).
         private static readonly int AirStateHash = Animator.StringToHash("Air");
         private static readonly int AirStandingStateHash = Animator.StringToHash("AirStanding");
         private static readonly int RollStateHash = Animator.StringToHash("Roll");
+        private static readonly int SwimStateHash = Animator.StringToHash("Swim");
 
         // Velocidade (m/s, sem suavização) abaixo da qual o Player conta como parado / acima da qual conta como andando.
         private const float RestSpeed = 0.05f;
@@ -88,8 +92,32 @@ namespace PROCEDURAL_GAME.Player
         [SerializeField, Range(0f, 1f)] private float standingLandPhase = 0.75f;
 
         [Header("Queda do pulo com rolagem")]
-        [Tooltip("Correção de altura do corpo (m, já na escala) ao longo do começo do Falling To Roll (x = ponto 0 a 1 do clipe), medida pelo menu: no ápice o quadril fica na altura do ápice do pulo e desce até a pose do toque no chão, sem o salto para cima do começo do clipe. Vazia = sem correção.")]
+        [Tooltip("Ponto do Falling To Roll (0 a 1) em que a pose de queda começa no ápice do pulo: o primeiro em que o quadril do clipe já desceu até a altura do quadril no ápice do pulo (o começo do clipe cai de bem mais alto). Medido pelo menu.")]
+        [SerializeField, Range(0f, 1f)] private float rollFallStartPhase;
+
+        [Tooltip("Correção de altura do corpo (m, já na escala) ao longo da queda do Falling To Roll (x = ponto 0 a 1 do clipe), medida pelo menu: o quadril sai da altura do ápice do pulo e desce até a pose do toque no chão. Vazia = sem correção.")]
         [SerializeField] private AnimationCurve rollFallLift = new AnimationCurve();
+
+        [Header("Natação")]
+        [Tooltip("Quanto o corpo sobe (m, já na escala) na pose de nadar para a frente, para a cabeça ficar na superfície como na pose de boiar. Medido pelo menu.")]
+        [SerializeField] private float swimForwardLift;
+
+        [Tooltip("Altura (m, já na escala) do quadril nas poses de boiar e de nadar: centro do giro ao inclinar o corpo debaixo d'água. Medidas pelo menu.")]
+        [SerializeField, Min(0f)] private float swimIdlePivot = 2f;
+
+        [SerializeField, Min(0f)] private float swimForwardPivot = 2f;
+
+        [Tooltip("Mistura boiar -> nadar: chega a 100% nadar nesta fração da velocidade de nado.")]
+        [SerializeField, Range(0.1f, 1f)] private float swimBlendFraction = 0.6f;
+
+        [Tooltip("Suavização (s) da mistura boiar <-> nadar.")]
+        [SerializeField, Min(0.01f)] private float swimBlendSmoothing = 0.25f;
+
+        [Tooltip("Debaixo d'água o corpo inclina para onde nada (descendo = cabeça para baixo), até este ângulo (graus).")]
+        [SerializeField, Range(0f, 89f)] private float maxSwimPitch = 70f;
+
+        [Tooltip("Velocidade (graus/s) da inclinação do corpo debaixo d'água.")]
+        [SerializeField, Min(1f)] private float swimPitchSpeed = 120f;
 
         [Tooltip("Depois de pousar, tempo (s) para a marcha sair do parado e chegar em andar/correr: a corrida só entra de vez quando o corpo já absorveu o pouso. Acompanha o fade do pouso (LandingFade no PlayerBuilder).")]
         [SerializeField, Min(0.01f)] private float landingGaitRamp = 0.25f;
@@ -127,7 +155,12 @@ namespace PROCEDURAL_GAME.Player
         private float moveTime;
         private float rollPose;
         private bool hasRollParameters;
+        private bool hasSwimParameters;
         private PlayerFootIK footIk;
+        private bool wasSwimming;
+        private float swimBlend;
+        private float swimBlendVelocity;
+        private float swimPitch;
 
         private void Awake()
         {
@@ -146,6 +179,7 @@ namespace PROCEDURAL_GAME.Player
 
             // Controller antigo (antes de rodar o menu de novo): sem os parâmetros da rolagem, não os escreve (evita avisos todo frame).
             hasRollParameters = HasParameter(animator, RollPhaseId) && HasParameter(animator, RollingId) && HasParameter(animator, RollFallId);
+            hasSwimParameters = HasParameter(animator, SwimmingId) && HasParameter(animator, SwimBlendId) && HasParameter(animator, SwimSpeedId);
             footIk = animator.GetComponent<PlayerFootIK>();
         }
 
@@ -167,6 +201,25 @@ namespace PROCEDURAL_GAME.Player
         {
             float speed = movement.HorizontalSpeed;
             float dt = Time.deltaTime;
+
+            bool swimming = movement.IsSwimming;
+            if (swimming != wasSwimming)
+            {
+                // Saiu da água andando: a marcha sobe como num pouso.
+                if (!swimming) gaitRampEnd = Time.time + landingGaitRamp;
+                wasSwimming = swimming;
+            }
+
+            if (swimming)
+            {
+                UpdateSwim(dt);
+                UpdateBodyOffset(dt);
+                movement.JumpAllowed = false; // na água o botão de pulo mergulha/sobe (PlayerMovement); nada de pulo, ataque ou coleta
+                return;
+            }
+
+            UpdateSwimBlend(0f, dt);
+            if (hasSwimParameters) animator.SetBool(SwimmingId, false);
 
             // Velocidade da ANIMAÇÃO. Com a manete só encostada (velocidade pequena) ou solta logo depois, o corpo se move/pára mas a pose
             // não podia ficar no idle (deslizava): qualquer movimento vale pelo menos minStepSpeed e dura pelo menos minMoveSeconds.
@@ -215,6 +268,7 @@ namespace PROCEDURAL_GAME.Player
 
             UpdateAir(grounded, dt);
             UpdateRoll(dt);
+            UpdateBodyOffset(dt);
 
             // Novo pulo (e ataque, que usa a mesma regra) só depois de a animação terminar: no ar, rolando e durante todo o fade do pouso
             // ou da saída da rolagem os toques são descartados. Um gatilho disparado com o Animator nesses estados ficaria guardado e sairia
@@ -249,8 +303,9 @@ namespace PROCEDURAL_GAME.Player
             }
             else if (fall)
             {
+                // A pose de queda começa onde o quadril do clipe já está na altura do ápice do pulo (o começo do clipe cai de mais alto).
                 float v0 = Mathf.Max(1f, movement.JumpVelocity);
-                rollPose = Mathf.Lerp(0f, movement.RollImpactPhase, Mathf.Clamp01(-movement.VerticalVelocity / v0));
+                rollPose = Mathf.Lerp(rollFallStartPhase, movement.RollImpactPhase, Mathf.Clamp01(-movement.VerticalVelocity / v0));
             }
             else if (movement.RollClipLength > 0f)
             {
@@ -260,25 +315,88 @@ namespace PROCEDURAL_GAME.Player
             animator.SetBool(RollFallId, fall);
             animator.SetBool(RollingId, movement.IsRolling);
             animator.SetFloat(RollPhaseId, rollPose);
-
-            // Correção de altura na proporção em que a pose do Falling To Roll aparece: durante o fade a partir do ápice o corpo fica na
-            // altura do ápice (nem sobe, nem cai de repente).
-            if (footIk != null)
-            {
-                float lift = rollFallLift != null && rollFallLift.length > 0 ? rollFallLift.Evaluate(rollPose) : 0f;
-                footIk.VisualLift = lift * RollStateWeight();
-            }
         }
 
-        // Quanto da pose atual vem do estado Roll (0 a 1), incluindo os fades de entrada e saída.
-        private float RollStateWeight()
+        // Na água: boiar (parado) <-> nadar (em movimento), ritmo da braçada pela velocidade. Nada de marcha, ar ou pouso.
+        private void UpdateSwim(float dt)
+        {
+            airTime = 0f;
+            airActive = false;
+            windingUp = false;
+            moveTime = 0f;
+            moveHold = 0f;
+
+            animator.SetBool(GroundedId, true);
+            animator.SetBool(LandedId, true);
+            animator.SetFloat(SpeedId, movement.RequestedSpeed);
+            animator.SetFloat(GaitId, 0f);
+
+            float speed = movement.IsSubmerged ? movement.SwimVelocity.magnitude : movement.HorizontalSpeed;
+            float swimSpeed = Mathf.Max(0.1f, movement.SwimSpeed);
+            UpdateSwimBlend(Mathf.Clamp01(speed / (swimSpeed * swimBlendFraction)), dt);
+
+            if (!hasSwimParameters) return;
+
+            // Morto (ou preso a uma ação) não volta ao estado de natação: a animação de morte fica.
+            animator.SetBool(SwimmingId, !movement.ActionLocked);
+            animator.SetFloat(SwimBlendId, swimBlend);
+            animator.SetFloat(SwimSpeedId, speed > 0.2f ? Mathf.Clamp(speed / swimSpeed, 0.7f, 1.5f) : 1f);
+        }
+
+        private void UpdateSwimBlend(float target, float dt)
+        {
+            // Com o jogo pausado, SmoothDamp divide por zero.
+            if (dt <= 0f) return;
+            swimBlend = Mathf.SmoothDamp(swimBlend, target, ref swimBlendVelocity, swimBlendSmoothing);
+        }
+
+        /// <summary>
+        /// Ajustes do corpo inteiro (no objeto Model, aplicados pelo PlayerFootIK) na proporção em que cada pose aparece, contando o fade em
+        /// andamento: a altura da queda do Falling To Roll (começa na altura do ápice do pulo), a altura da pose de nadar (cabeça na superfície
+        /// como ao boiar) e a inclinação debaixo d'água.
+        /// </summary>
+        private void UpdateBodyOffset(float dt)
+        {
+            if (footIk == null) return;
+
+            float lift = 0f;
+            if (rollFallLift != null && rollFallLift.length > 0) lift += rollFallLift.Evaluate(rollPose) * StateWeight(RollStateHash);
+
+            float swimWeight = StateWeight(SwimStateHash);
+            lift += swimForwardLift * swimBlend * swimWeight;
+
+            float targetPitch = 0f;
+            if (movement.IsSubmerged)
+            {
+                Vector3 v = movement.SwimVelocity;
+                float horizontal = new Vector2(v.x, v.z).magnitude;
+                if (v.sqrMagnitude > 0.09f) targetPitch = Mathf.Clamp(Mathf.Atan2(-v.y, horizontal) * Mathf.Rad2Deg, -maxSwimPitch, maxSwimPitch) * swimBlend;
+            }
+
+            if (dt > 0f) swimPitch = Mathf.MoveTowards(swimPitch, targetPitch, swimPitchSpeed * dt);
+
+            footIk.VisualLift = lift;
+            footIk.VisualPitch = swimPitch * swimWeight;
+            footIk.PitchPivotHeight = Mathf.Lerp(swimIdlePivot, swimForwardPivot, swimBlend);
+        }
+
+        /// <summary>
+        /// Quanto da pose que o Animator vai mostrar neste frame vem do estado (0 a 1), incluindo fades de entrada e saída. O Animator só avalia
+        /// depois dos scripts: o progresso do fade lido aqui é o do frame anterior, então soma o passo deste frame (sem isso a correção de
+        /// altura ficava um frame atrasada e o corpo dava um pequeno salto durante o fade).
+        /// </summary>
+        private float StateWeight(int stateHash)
         {
             AnimatorStateInfo current = animator.GetCurrentAnimatorStateInfo(0);
-            if (!animator.IsInTransition(0)) return current.shortNameHash == RollStateHash ? 1f : 0f;
+            if (!animator.IsInTransition(0)) return current.shortNameHash == stateHash ? 1f : 0f;
 
-            float t = Mathf.Clamp01(animator.GetAnimatorTransitionInfo(0).normalizedTime);
-            if (animator.GetNextAnimatorStateInfo(0).shortNameHash == RollStateHash) return t;
-            return current.shortNameHash == RollStateHash ? 1f - t : 0f;
+            AnimatorTransitionInfo info = animator.GetAnimatorTransitionInfo(0);
+            float t = info.normalizedTime;
+            if (info.durationUnit == DurationUnit.Fixed && info.duration > 0f) t += Time.deltaTime / info.duration;
+            t = Mathf.Clamp01(t);
+
+            if (animator.GetNextAnimatorStateInfo(0).shortNameHash == stateHash) return t;
+            return current.shortNameHash == stateHash ? 1f - t : 0f;
         }
 
         /// <summary>O Animator Controller tem este parâmetro?</summary>

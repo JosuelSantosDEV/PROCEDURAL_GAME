@@ -39,6 +39,8 @@ namespace PROCEDURAL_GAME.MobileInput
 
         public bool JumpPressed => jumpButton != null && jumpButton.WasPressedThisFrame;
 
+        public bool JumpHeld => jumpButton != null && jumpButton.IsHeld;
+
         public bool AttackPressed => attackButton != null && attackButton.WasPressedThisFrame;
 
         /// <summary>Corrida ligada pelo botão: vale até o próximo toque, mesmo com a manete solta.</summary>
@@ -112,6 +114,14 @@ namespace PROCEDURAL_GAME.MobileInput
         }
 
         private void ToggleSprint() => SetSprint(!SprintOn);
+
+        /// <summary>Nome do botão de pulo (Pular, Mergulhar, Subir) e se fica apagado (sem efeito agora).</summary>
+        public void SetJumpButton(string label, bool dimmed)
+        {
+            if (jumpButton == null) return;
+            jumpButton.SetLabel(label);
+            jumpButton.SetDimmed(dimmed);
+        }
 
         /// <summary>Liga ou desliga a corrida, com o visual do botão junto.</summary>
         public void SetSprint(bool on)

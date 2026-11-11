@@ -24,6 +24,7 @@ namespace PROCEDURAL_GAME.Player
         private InputAction jumpAction;
         private InputAction sprintAction;
         private InputAction toggleCameraAction;
+        private PlayerMovement movement;
 
         /// <summary>Direção desejada (WASD / analógico esquerdo / joystick de tela), cada eixo entre -1 e 1.</summary>
         public Vector2 Move
@@ -57,6 +58,9 @@ namespace PROCEDURAL_GAME.Player
         /// <summary>True apenas no frame em que o botão de pulo foi apertado.</summary>
         public bool JumpPressed => jumpAction.WasPressedThisFrame() || (mobileControls != null && mobileControls.JumpPressed);
 
+        /// <summary>Botão de pulo segurado (debaixo d'água: subir).</summary>
+        public bool JumpHeld => jumpAction.IsPressed() || (mobileControls != null && mobileControls.JumpHeld);
+
         /// <summary>True apenas no frame em que o botão de ataque foi apertado (só na tela, por enquanto).</summary>
         public bool AttackPressed => mobileControls != null && mobileControls.AttackPressed;
 
@@ -84,6 +88,26 @@ namespace PROCEDURAL_GAME.Player
             jumpAction = actionMap.FindAction("Jump", throwIfNotFound: true);
             sprintAction = actionMap.FindAction("Sprint", throwIfNotFound: true);
             toggleCameraAction = actionMap.FindAction("ToggleCamera", throwIfNotFound: true);
+            movement = GetComponent<PlayerMovement>();
+        }
+
+        // O botão de pulo da tela muda de nome na água: Mergulhar (apagado onde é raso demais) e Subir.
+        private void LateUpdate()
+        {
+            if (mobileControls == null || movement == null) return;
+
+            switch (movement.JumpRole)
+            {
+                case JumpButtonRole.Dive:
+                    mobileControls.SetJumpButton("Mergulhar", !movement.CanDive);
+                    break;
+                case JumpButtonRole.Rise:
+                    mobileControls.SetJumpButton("Subir", false);
+                    break;
+                default:
+                    mobileControls.SetJumpButton("Pular", false);
+                    break;
+            }
         }
 
         // As Actions só enviam valores enquanto o Action Map estiver habilitado.

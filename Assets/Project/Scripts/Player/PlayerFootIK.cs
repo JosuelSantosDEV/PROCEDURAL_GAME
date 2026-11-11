@@ -86,6 +86,12 @@ namespace PROCEDURAL_GAME.Player
         /// começa com o corpo bem mais alto que o ápice do pulo, e sem isso o corpo daria um salto para cima ao trocar de pose.
         /// </summary>
         public float VisualLift { get; set; }
+
+        /// <summary>Inclinação do corpo para a frente (graus; positivo = cabeça para baixo), pedida pelo PlayerAnimator ao nadar mergulhado.</summary>
+        public float VisualPitch { get; set; }
+
+        /// <summary>Altura (m, acima dos pés) do ponto em torno do qual o corpo inclina (o quadril da pose atual).</summary>
+        public float PitchPivotHeight { get; set; }
         private float airUntil;
         private bool ready;
 
@@ -140,7 +146,9 @@ namespace PROCEDURAL_GAME.Player
                 pelvisOffset = 0f;
                 ikWeight = 0f;
                 VisualLift = 0f;
+                VisualPitch = 0f;
                 transform.localPosition = baseLocalPosition;
+                transform.localRotation = Quaternion.identity;
             }
         }
 
@@ -158,7 +166,11 @@ namespace PROCEDURAL_GAME.Player
             float target = Mathf.Clamp(pelvisTarget, -maxPelvisDrop * scale, 0f) * ikWeight;
             float k = 1f - Mathf.Exp(-pelvisFollow * Time.deltaTime);
             pelvisOffset = Mathf.Lerp(pelvisOffset, target, k);
-            transform.localPosition = baseLocalPosition + Vector3.up * (pelvisOffset + VisualLift);
+            // Inclinação em torno do quadril: a origem do modelo (nos pés) gira em volta desse ponto.
+            Quaternion tilt = Quaternion.Euler(VisualPitch, 0f, 0f);
+            Vector3 pivot = Vector3.up * PitchPivotHeight;
+            transform.localRotation = tilt;
+            transform.localPosition = baseLocalPosition + Vector3.up * (pelvisOffset + VisualLift) + (pivot - tilt * pivot);
         }
 
         private void OnAnimatorIK(int layerIndex)
@@ -166,8 +178,8 @@ namespace PROCEDURAL_GAME.Player
             if (!ready || layerIndex != 0) return;
 
             float dt = Time.deltaTime;
-            // Rolando, o corpo gira no chão: prender os pés puxaria as pernas.
-            bool rolling = movement != null && movement.IsRolling;
+            // Rolando ou nadando: prender os pés ao chão puxaria as pernas.
+            bool rolling = movement != null && (movement.IsRolling || movement.IsSwimming);
             bool wantIk = animator.GetBool(GroundedId) && Time.time >= airUntil && !rolling;
             ikWeight = Mathf.MoveTowards(ikWeight, wantIk ? 1f : 0f, (wantIk ? landFadeSpeed : fadeSpeed) * dt);
 

@@ -288,7 +288,9 @@ namespace PROCEDURAL_GAME.Player
         {
             PickupRegistry pickups = world != null ? world.Pickups : null;
 
-            if (pickups != null && pickups.TryFindNearest(transform.position, pickupReach, out nearbyPickup)) Available = Interaction.Eat;
+            // Nadando não dá para agachar: nada de beber ou pegar.
+            if (movement.IsSwimming) Available = Interaction.None;
+            else if (pickups != null && pickups.TryFindNearest(transform.position, pickupReach, out nearbyPickup)) Available = Interaction.Eat;
             else Available = stats.CanDrink ? Interaction.Drink : Interaction.None;
         }
 

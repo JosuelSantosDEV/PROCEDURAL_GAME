@@ -1,3 +1,4 @@
+using PROCEDURAL_GAME.World;
 using UnityEngine;
 
 namespace PROCEDURAL_GAME.Player
@@ -74,6 +75,36 @@ namespace PROCEDURAL_GAME.Player
         [Tooltip("Só rola se, ao pular, a velocidade era pelo menos esta fração da de andar (uma esticada leve da manete pousa normal).")]
         [SerializeField, Range(0f, 1f)] private float rollMinSpeedFraction = 0.5f;
 
+        [Header("Natação (lagos)")]
+        [Tooltip("Velocidade nadando (m/s). Correndo ligado, nada mais rápido e gasta energia como na corrida.")]
+        [SerializeField, Min(0f)] private float swimSpeed = 2.5f;
+
+        [SerializeField, Min(0f)] private float swimSprintSpeed = 4f;
+
+        [Tooltip("Boiando, quanto os pés ficam abaixo da superfície (m). Medido no clipe de boiar pelo menu: a cabeça fica fora d'água. Também é a profundidade a partir da qual o Player começa a nadar.")]
+        [SerializeField, Min(0.1f)] private float floatDepth = 2.9f;
+
+        [Tooltip("Volta a andar quando o fundo fica mais raso que esta fração da profundidade de boiar (menor que 1: não fica trocando na beirada).")]
+        [SerializeField, Range(0.5f, 0.98f)] private float swimExitFraction = 0.85f;
+
+        [Tooltip("Profundidade mínima (m) da água para dar para mergulhar.")]
+        [SerializeField, Min(0f)] private float diveMinDepth = 5f;
+
+        [Tooltip("Velocidade (m/s) ao subir segurando o botão (Subir) debaixo d'água, e a do impulso para baixo ao mergulhar.")]
+        [SerializeField, Min(0f)] private float swimVerticalSpeed = 2.5f;
+
+        [Tooltip("Duração (s) do impulso para baixo ao mergulhar: o corpo afunda de verdade antes de a flutuação valer.")]
+        [SerializeField, Min(0f)] private float diveSeconds = 0.8f;
+
+        [Tooltip("Debaixo d'água sem mexer, o corpo sobe devagar (m/s): o ar dos pulmões puxa para cima.")]
+        [SerializeField, Min(0f)] private float buoyancy = 0.5f;
+
+        [Tooltip("Aceleração (m/s²) na água: menor = mais deslizado (inércia da água).")]
+        [SerializeField, Min(0.1f)] private float swimAcceleration = 6f;
+
+        [Tooltip("Debaixo d'água a direção segue a câmera; olhar até este ângulo (graus) para cima/baixo ainda nada reto (a câmera da 3ª pessoa já olha um pouco para baixo).")]
+        [SerializeField, Range(0f, 45f)] private float underwaterPitchDeadZone = 15f;
+
         [Header("Primeira pessoa")]
         [Tooltip("Parado, o corpo só gira quando a câmera passa deste ângulo (graus) em relação a ele: o 'pescoço' aguenta isso. Andando, o corpo acompanha a câmera sempre.")]
         [SerializeField, Range(10f, 120f)] private float neckLimit = 50f;
@@ -99,6 +130,15 @@ namespace PROCEDURAL_GAME.Player
         private bool jumpRequested;
         private float requestedSpeed;
         private bool rollArmed;
+        private WorldGenerator world;
+        private bool swimming;
+        private bool submerged;
+        private bool inWater;
+        private float waterLevel;
+        private float bedDepth;
+        private Vector3 swimVelocity;
+        private float diveTimer;
+        private bool leftSurface;
         private bool rolling;
         private float rollPhase;
         private float rollPlayback = 1f;
@@ -163,6 +203,24 @@ namespace PROCEDURAL_GAME.Player
         /// <summary>Disparado quando a rolagem termina e o jogador volta a controlar.</summary>
         public event System.Action RollEnded;
 
+        /// <summary>Nadando (boiando na superfície ou mergulhado).</summary>
+        public bool IsSwimming => swimming;
+
+        /// <summary>Mergulhado: a direção segue a câmera (para cima/baixo também).</summary>
+        public bool IsSubmerged => swimming && submerged;
+
+        /// <summary>Velocidade na água (m/s, 3D).</summary>
+        public Vector3 SwimVelocity => swimVelocity;
+
+        /// <summary>Velocidade de nado normal (m/s): referência para o ritmo da animação.</summary>
+        public float SwimSpeed => swimSpeed;
+
+        /// <summary>Na superfície, com água funda o bastante para mergulhar aqui.</summary>
+        public bool CanDive => swimming && !submerged && bedDepth >= diveMinDepth;
+
+        /// <summary>O que o botão de pulo faz agora (a tela troca o nome do botão).</summary>
+        public JumpButtonRole JumpRole => !swimming ? JumpButtonRole.Jump : submerged ? JumpButtonRole.Rise : JumpButtonRole.Dive;
+
         /// <summary>
         /// Se um novo pulo é aceito agora. O PlayerAnimator desliga do início do pulo até o fim da animação de pouso: toques nesse intervalo são
         /// descartados, não guardados para depois.
@@ -190,6 +248,11 @@ namespace PROCEDURAL_GAME.Player
         /// <summary>Pés no chão (resultado do último Move).</summary>
         public bool IsGrounded => controller != null && controller.isGrounded;
 
+        private void Start()
+        {
+            world = FindObjectOfType<WorldGenerator>();
+        }
+
         private void Awake()
         {
             controller = GetComponent<CharacterController>();
@@ -210,6 +273,13 @@ namespace PROCEDURAL_GAME.Player
 
         private void Update()
         {
+            UpdateWaterState();
+            if (swimming)
+            {
+                UpdateSwimming();
+                return;
+            }
+
             horizontalVelocity = GetHorizontalVelocity();
             horizontalSpeed = horizontalVelocity.magnitude;
             UpdateVerticalVelocity();
@@ -261,6 +331,150 @@ namespace PROCEDURAL_GAME.Player
 
             return desired;
         }
+
+        // ------------------------------------------------------------------------------------------------- natação
+
+        private float FeetY => transform.position.y + controller.center.y - controller.height * 0.5f;
+
+        // Água sob o Player: nível do lago e profundidade do fundo ali (do relevo, a mesma função que gera o terreno).
+        private void UpdateWaterState()
+        {
+            LakeMap lakes = world != null ? world.Lakes : null;
+            Vector3 position = transform.position;
+            inWater = lakes != null && lakes.Query(position.x, position.z, out float shore, out waterLevel, out _) && shore < 0f;
+
+            if (!inWater)
+            {
+                if (swimming) StopSwimming();
+                return;
+            }
+
+            bedDepth = waterLevel - world.GetHeight(position.x, position.z);
+            float feetDepth = waterLevel - FeetY;
+
+            if (!swimming)
+            {
+                // Entra andando (o fundo chega à profundidade de boiar) ou caindo/pulando na água funda.
+                if (bedDepth >= floatDepth && feetDepth >= floatDepth * 0.9f) StartSwimming();
+            }
+            else if (!submerged && bedDepth < floatDepth * swimExitFraction)
+            {
+                StopSwimming();
+            }
+        }
+
+        private void StartSwimming()
+        {
+            swimming = true;
+            submerged = false;
+            rolling = false;
+            rollArmed = false;
+            windingUp = false;
+            jumpRequested = false;
+            turnInPlace = 0;
+
+            // Caindo na água: o mergulho de entrada perde força rápido (a mola da superfície traz de volta).
+            swimVelocity = new Vector3(horizontalVelocity.x, Mathf.Max(verticalVelocity * 0.35f, -swimVerticalSpeed * 2f), horizontalVelocity.z);
+        }
+
+        private void StopSwimming()
+        {
+            swimming = false;
+            submerged = false;
+            verticalVelocity = 0f;
+            ResetJumpPhysics();
+        }
+
+        /// <summary>
+        /// Na superfície: anda no plano (como em terra) e uma mola segura os pés a <see cref="floatDepth"/> da superfície; o botão de pulo
+        /// mergulha (com água funda). Mergulhado: a direção segue a câmera, inclusive para cima e para baixo; segurar o botão sobe, parado o
+        /// corpo sobe devagar; ao chegar à altura de boiar subindo, volta à superfície. Sem gravidade; a água dá inércia (aceleração limitada).
+        /// </summary>
+        private void UpdateSwimming()
+        {
+            float dt = Time.deltaTime;
+            Vector2 move = ActionLocked ? Vector2.zero : input.Move;
+            float speed = input.Sprinting && !SprintBlocked ? swimSprintSpeed : swimSpeed;
+            requestedSpeed = Vector3.ClampMagnitude(ToCameraSpace(input.Move), 1f).magnitude * speed;
+
+            bool pressed = !ActionLocked && input.JumpPressed;
+            if (!submerged && pressed && CanDive)
+            {
+                submerged = true;
+                leftSurface = false;
+                diveTimer = diveSeconds;
+                swimVelocity.y = -swimVerticalSpeed;
+            }
+
+            float surfaceFeet = waterLevel - floatDepth;
+            Vector3 target;
+
+            if (submerged)
+            {
+                target = Vector3.ClampMagnitude(UnderwaterDirection(move), 1f) * speed;
+                bool rising = !ActionLocked && input.JumpHeld;
+                diveTimer -= dt;
+
+                if (rising) target.y = Mathf.Max(target.y, swimVerticalSpeed);
+                else if (diveTimer > 0f) target.y = Mathf.Min(target.y, -swimVerticalSpeed); // impulso do mergulho
+                else if (move.sqrMagnitude < 0.01f) target.y = buoyancy;
+
+                // Volta à superfície ao chegar à altura de boiar subindo, mas só depois de ter afundado de verdade (senão o mergulho
+                // se desfazia no primeiro frame).
+                if (FeetY < surfaceFeet - floatDepth * 0.25f) leftSurface = true;
+                if (leftSurface && FeetY >= surfaceFeet - 0.05f && target.y >= 0f) submerged = false;
+            }
+            else
+            {
+                target = Vector3.ClampMagnitude(ToCameraSpace(move), 1f) * speed;
+            }
+
+            if (!submerged)
+            {
+                // Mola até a altura de boiar (subir de um mergulho ou depois de cair na água).
+                target.y = Mathf.Clamp((surfaceFeet - FeetY) * 4f, -swimVerticalSpeed * 2f, swimVerticalSpeed * 1.5f);
+            }
+
+            if (dt > 0f) swimVelocity = Vector3.MoveTowards(swimVelocity, target, swimAcceleration * dt);
+
+            controller.Move(swimVelocity * dt);
+
+            horizontalVelocity = new Vector3(swimVelocity.x, 0f, swimVelocity.z);
+            horizontalSpeed = submerged ? swimVelocity.magnitude : horizontalVelocity.magnitude;
+            verticalVelocity = swimVelocity.y;
+
+            if (ActionLocked)
+            {
+                turnInPlace = 0;
+            }
+            else if (FaceCamera && cameraTransform != null)
+            {
+                RotateTowardsCamera(horizontalVelocity);
+                turnInPlace = 0; // nadando não há passos de giro
+            }
+            else
+            {
+                RotateTowards(horizontalVelocity);
+            }
+        }
+
+        // Debaixo d'água: frente = para onde a câmera olha, incluindo cima/baixo (com uma zona morta perto do horizontal).
+        private Vector3 UnderwaterDirection(Vector2 move)
+        {
+            if (cameraTransform == null) return new Vector3(move.x, 0f, move.y);
+
+            Vector3 forward = Vector3.ProjectOnPlane(cameraTransform.forward, Vector3.up).normalized;
+            Vector3 right = Vector3.ProjectOnPlane(cameraTransform.right, Vector3.up).normalized;
+
+            float pitch = Mathf.Asin(Mathf.Clamp(cameraTransform.forward.y, -1f, 1f)) * Mathf.Rad2Deg;
+            float magnitude = Mathf.Max(0f, Mathf.Abs(pitch) - underwaterPitchDeadZone) * 90f / Mathf.Max(1f, 90f - underwaterPitchDeadZone);
+            float angle = Mathf.Sign(pitch) * magnitude * Mathf.Deg2Rad;
+
+            Vector3 swimForward = forward * Mathf.Cos(angle) + Vector3.up * Mathf.Sin(angle);
+            return swimForward * move.y + right * move.x;
+        }
+
+        // ------------------------------------------------------------------------------------------------- rolagem
 
         /// <summary>
         /// Avança a rolagem e devolve a velocidade dela. O deslocamento é a diferença da curva de distância medida no clipe entre o ponto

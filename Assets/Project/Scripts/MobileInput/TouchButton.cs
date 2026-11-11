@@ -25,6 +25,7 @@ namespace PROCEDURAL_GAME.MobileInput
         private Image ring;
         private Text label;
         private bool toggled;
+        private bool dimmed;
         private float flashStart = -1f;
         private float scale = 1f;
 
@@ -64,6 +65,22 @@ namespace PROCEDURAL_GAME.MobileInput
         {
             Initialize();
             toggled = on;
+            ApplyColors(FlashAmount());
+        }
+
+        /// <summary>Troca o texto do botão (só se mudou: trocar texto de UI todo frame refaz a malha do texto).</summary>
+        public void SetLabel(string text)
+        {
+            Initialize();
+            if (label != null && label.text != text) label.text = text;
+        }
+
+        /// <summary>Apagado: o botão continua tocável, mas mostra que agora não tem efeito.</summary>
+        public void SetDimmed(bool value)
+        {
+            Initialize();
+            if (dimmed == value) return;
+            dimmed = value;
             ApplyColors(FlashAmount());
         }
 
@@ -118,8 +135,15 @@ namespace PROCEDURAL_GAME.MobileInput
             Color restFill = toggled ? TouchControlPalette.ToggledFill : TouchControlPalette.ButtonFill;
             Color restRing = toggled ? TouchControlPalette.ToggledRing : TouchControlPalette.ButtonRing;
 
+            if (dimmed)
+            {
+                restFill.a *= 0.45f;
+                restRing.a *= 0.35f;
+            }
+
             if (fill != null) fill.color = Color.Lerp(restFill, TouchControlPalette.FlashFill, flash);
             if (ring != null) ring.color = Color.Lerp(restRing, TouchControlPalette.FlashRing, flash);
+            if (label != null) label.color = dimmed ? new Color(TouchControlPalette.ButtonLabel.r, TouchControlPalette.ButtonLabel.g, TouchControlPalette.ButtonLabel.b, 0.4f) : TouchControlPalette.ButtonLabel;
         }
     }
 }

@@ -27,7 +27,7 @@ namespace PROCEDURAL_GAME.World
         public Vector2 radiusRange = new Vector2(28f, 44f);
 
         [Tooltip("Profundidade no centro, em metros. Fundo em forma de tigela, com margem suave. 4 a 5 m dá para nadar por baixo.")]
-        [Min(0.5f)] public float maxDepth = 4.5f;
+        [Min(0.5f)] public float maxDepth = 9f;
 
         [Tooltip("Profundidade da depressão: quanto a água fica ABAIXO do terreno em volta. O terreno desce suavemente até a água (ilustração depressao_desejada). Nível da água = altura natural no centro do lago menos isto. Cada lago tem o próprio nível.")]
         [Min(0.3f)] public float levelOffset = 6f;

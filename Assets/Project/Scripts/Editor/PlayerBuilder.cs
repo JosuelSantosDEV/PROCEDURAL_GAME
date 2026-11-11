@@ -69,6 +69,22 @@ namespace PROCEDURAL_GAME.EditorTools
         private const string BurakWalkPath = BurakMovementRoot + "Walk/Walk_InPlace.fbx";
         private const string BurakRunPath = BurakMovementRoot + "Run/Run_InPlace.fbx";
 
+        // Natação do mesmo pacote: boiar (parado, cabeça fora d'água) e nadar para a frente. Também usados debaixo d'água (o corpo inclina).
+        private const string BurakSwimPath = BurakMovementRoot + "Swim/Swim_InPlace.fbx";
+        private const string SwimIdleClip = "Rig|Swim_Idle_InPlace";
+        private const string SwimForwardClip = "Rig|Swim_Forward_InPlace";
+
+        // Natação (escala 1, multiplicada por PlayerScale): velocidades, impulso vertical, flutuação e profundidade mínima para mergulhar.
+        private const float BaseSwimSpeed = 1.25f;
+        private const float BaseSwimSprintSpeed = 2f;
+        private const float BaseSwimVerticalSpeed = 1.25f;
+        private const float BaseBuoyancy = 0.25f;
+        private const float BaseDiveMinDepth = 2.5f;
+        // Boiando, o osso da cabeça fica um pouco acima da água (o rosto fora d'água).
+        private const float BaseHeadAboveWater = 0.08f;
+        // Fade de entrada e saída da natação (s).
+        private const float SwimFade = 0.3f;
+
         // Direção de cada clipe (nome "Rig|<Walk|Run>_<direção>_InPlace") e posição na mistura 2D (x = direita, y = frente).
         private static readonly string[] DirectionNames = { "Forward", "Forward_Right", "Right", "Backward_Right", "Backward", "Backward_Left", "Left", "Forward_Left" };
         private static readonly Vector2[] DirectionPositions =
@@ -221,11 +237,20 @@ namespace PROCEDURAL_GAME.EditorTools
             Debug.Log("Chute no projeto antigo (evento de acerto): 0,39 a 0,50 do clipe. Compare com a medição acima.");
 
             // Rolagem do pulo em movimento (opcional: sem o arquivo, o pulo em movimento pousa normal).
+            // Natação (opcional: sem os clipes, o Player anda no fundo do lago como antes).
+            AnimationClip swimIdle = FindClipByName(BurakSwimPath, SwimIdleClip);
+            AnimationClip swimForward = FindClipByName(BurakSwimPath, SwimForwardClip);
+            bool canSwim = swimIdle != null && swimForward != null;
+            if (!canSwim) Debug.LogWarning($"Clipes de natação não encontrados em '{BurakSwimPath}': o Player não vai nadar.");
+            SwimPose swimIdlePose = canSwim ? MeasureSwimPose(modelAsset, swimIdle, "boiar") : default;
+            SwimPose swimForwardPose = canSwim ? MeasureSwimPose(modelAsset, swimForward, "nadar") : default;
+
             AnimationClip rollClip = AssetImporter.GetAtPath(RollPath) != null ? EnsureMixamoClip(RollPath, false) : null;
             RollData roll = rollClip != null ? MeasureRoll(modelAsset, rollClip, FindClip(JumpPath), jumpPhases.apex) : default;
             if (rollClip == null) Debug.LogWarning($"'{RollPath}' não encontrado: o pulo em movimento pousa sem rolar.");
 
-            AnimatorController controller = EnsureController(walkSpeed, sprintSpeed, idles, walkClips, runClips, walkScales, runScales, jumpPhases, standingJump, standingPhases, actionClips, rollClip);
+            AnimatorController controller = EnsureController(walkSpeed, sprintSpeed, idles, walkClips, runClips, walkScales, runScales, jumpPhases, standingJump, standingPhases, actionClips, rollClip,
+                canSwim ? swimIdle : null, canSwim ? swimForward : null);
             if (controller == null) return;
 
             Transform player = movement.transform;
@@ -259,6 +284,7 @@ namespace PROCEDURAL_GAME.EditorTools
 
             ApplyMovement(movement, walkSpeed, sprintSpeed, standingWindUp);
             ApplyRoll(movement, rollClip, roll);
+            if (canSwim) ApplySwim(movement, swimIdlePose);
 
             PlayerAnimator playerAnimator = GetOrAdd<PlayerAnimator>(player);
             SerializedObject animatorSo = new SerializedObject(playerAnimator);
@@ -278,6 +304,14 @@ namespace PROCEDURAL_GAME.EditorTools
             animatorSo.FindProperty("walkNaturalSpeed").floatValue = walkNatural;
             animatorSo.FindProperty("runNaturalSpeed").floatValue = runNatural;
             animatorSo.FindProperty("rollFallLift").animationCurveValue = rollClip != null && roll.fallLift != null ? roll.fallLift : new AnimationCurve();
+            animatorSo.FindProperty("rollFallStartPhase").floatValue = rollClip != null ? roll.fallStart : 0f;
+            if (canSwim)
+            {
+                // A pose de nadar sobe o que falta para a cabeça ficar na mesma altura da de boiar (na superfície).
+                animatorSo.FindProperty("swimForwardLift").floatValue = (swimIdlePose.head - swimForwardPose.head) * PlayerScale;
+                animatorSo.FindProperty("swimIdlePivot").floatValue = swimIdlePose.hips * PlayerScale;
+                animatorSo.FindProperty("swimForwardPivot").floatValue = swimForwardPose.hips * PlayerScale;
+            }
             animatorSo.ApplyModifiedPropertiesWithoutUndo();
 
             // Sobrevivência: vida, energia, sede e fome (a tela é montada por código pelo SurvivalHud).
@@ -478,6 +512,72 @@ namespace PROCEDURAL_GAME.EditorTools
 
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(movement);
+        }
+
+        // Natação no PlayerMovement: boiando, os pés ficam abaixo da água o bastante para a cabeça (pose de boiar) ficar logo acima dela.
+        private static void ApplySwim(PlayerMovement movement, SwimPose idlePose)
+        {
+            float floatDepth = Mathf.Max(0.5f, idlePose.head - BaseHeadAboveWater) * PlayerScale;
+
+            SerializedObject so = new SerializedObject(movement);
+            so.FindProperty("swimSpeed").floatValue = BaseSwimSpeed * PlayerScale;
+            so.FindProperty("swimSprintSpeed").floatValue = BaseSwimSprintSpeed * PlayerScale;
+            so.FindProperty("swimVerticalSpeed").floatValue = BaseSwimVerticalSpeed * PlayerScale;
+            so.FindProperty("buoyancy").floatValue = BaseBuoyancy * PlayerScale;
+            so.FindProperty("diveMinDepth").floatValue = Mathf.Max(BaseDiveMinDepth * PlayerScale, floatDepth + 1f);
+            so.FindProperty("floatDepth").floatValue = floatDepth;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(movement);
+
+            Debug.Log($"Natação: boiando os pés ficam {floatDepth:0.00} m abaixo da água (começa a nadar com essa profundidade); mergulho a partir de {Mathf.Max(BaseDiveMinDepth * PlayerScale, floatDepth + 1f):0.0} m.");
+        }
+
+        private struct SwimPose
+        {
+            public float head;
+            public float hips;
+        }
+
+        // Altura média (m, escala 1, acima da origem do modelo) da cabeça e do quadril ao longo de um clipe de natação.
+        private static SwimPose MeasureSwimPose(GameObject modelAsset, AnimationClip clip, string label)
+        {
+            SwimPose fallback = new SwimPose { head = 1.55f, hips = 0.95f };
+            const int Samples = 30;
+
+            GameObject temp = null;
+            try
+            {
+                temp = (GameObject)Object.Instantiate(modelAsset);
+                temp.hideFlags = HideFlags.HideAndDontSave;
+
+                Animator probe = temp.GetComponent<Animator>();
+                if (probe == null || !probe.isHuman) throw new System.InvalidOperationException("modelo sem Animator humanoide");
+
+                Transform head = probe.GetBoneTransform(HumanBodyBones.Head);
+                Transform hips = probe.GetBoneTransform(HumanBodyBones.Hips);
+                if (head == null || hips == null) throw new System.InvalidOperationException("ossos não encontrados");
+
+                SwimPose pose = default;
+                for (int i = 0; i < Samples; i++)
+                {
+                    temp.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+                    clip.SampleAnimation(temp, clip.length * i / Samples);
+                    pose.head += temp.transform.InverseTransformPoint(head.position).y / Samples;
+                    pose.hips += temp.transform.InverseTransformPoint(hips.position).y / Samples;
+                }
+
+                Debug.Log($"Natação ({label}): cabeça a {pose.head:0.00} m e quadril a {pose.hips:0.00} m da origem do modelo (escala 1).");
+                return pose;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"Não consegui medir a pose de {label} ({e.Message}); usando cabeça {fallback.head} m e quadril {fallback.hips} m.");
+                return fallback;
+            }
+            finally
+            {
+                if (temp != null) Object.DestroyImmediate(temp);
+            }
         }
 
         private static float RoundToHalf(float value) => Mathf.Round(value * 2f) * 0.5f;
@@ -684,7 +784,7 @@ namespace PROCEDURAL_GAME.EditorTools
             return clips;
         }
 
-        private static AnimatorController EnsureController(float walkSpeed, float sprintSpeed, List<AnimationClip> idles, AnimationClip[] walkClips, AnimationClip[] runClips, float[] walkScales, float[] runScales, JumpPhases jumpPhases, AnimationClip standingJump, JumpPhases standingPhases, ActionClips actionClips, AnimationClip rollClip)
+        private static AnimatorController EnsureController(float walkSpeed, float sprintSpeed, List<AnimationClip> idles, AnimationClip[] walkClips, AnimationClip[] runClips, float[] walkScales, float[] runScales, JumpPhases jumpPhases, AnimationClip standingJump, JumpPhases standingPhases, ActionClips actionClips, AnimationClip rollClip, AnimationClip swimIdle, AnimationClip swimForward)
         {
             AnimationClip idle = idles[0];
             AnimationClip jump = FindClip(JumpPath);
@@ -723,6 +823,10 @@ namespace PROCEDURAL_GAME.EditorTools
             controller.AddParameter("RollFall", AnimatorControllerParameterType.Bool);
             controller.AddParameter("Rolling", AnimatorControllerParameterType.Bool);
             controller.AddParameter("RollPhase", AnimatorControllerParameterType.Float);
+            // Natação: na água, mistura boiar (0) -> nadar (1) e ritmo da braçada.
+            controller.AddParameter("Swimming", AnimatorControllerParameterType.Bool);
+            controller.AddParameter("SwimBlend", AnimatorControllerParameterType.Float);
+            controller.AddParameter(new AnimatorControllerParameter { name = "SwimSpeed", type = AnimatorControllerParameterType.Float, defaultFloat = 1f });
             // Ponto (0..1) do clipe de pulo que o estado Air mostra; o PlayerAnimator o calcula pela velocidade vertical e, ao pousar, o leva até o fim.
             controller.AddParameter(new AnimatorControllerParameter { name = "AirPhase", type = AnimatorControllerParameterType.Float, defaultFloat = 0.3f });
 
@@ -800,7 +904,8 @@ namespace PROCEDURAL_GAME.EditorTools
             toFall.duration = 0.1f;
             toFall.AddCondition(AnimatorConditionMode.IfNot, 0f, "Grounded");
 
-            BuildIdleStates(machine, locomotion, air, airStanding, roll, idles, actionStates, actionClips);
+            AnimatorState idleEntry = BuildIdleStates(machine, locomotion, air, airStanding, roll, idles, actionStates, actionClips);
+            if (swimIdle != null && swimForward != null) BuildSwimState(controller, machine, locomotion, idleEntry, swimIdle, swimForward);
 
             // IK dos pés (PlayerFootIK): o callback OnAnimatorIK só roda com "IK Pass" ligado na camada.
             AnimatorControllerLayer[] layers = controller.layers;
@@ -815,7 +920,8 @@ namespace PROCEDURAL_GAME.EditorTools
         // Idle: dois estados. Idle0 (o antigo) repete IdleLoops vezes e passa ao Idle1 (Bored, uma vez só), que volta ao Idle0, e assim por diante.
         // Tudo é nativo do Animator (tempo de estado com exit time), sem script e SEM memória: toda entrada em idle vem pelo Idle0, e o tempo
         // do estado recomeça do zero. Mexer-se, pular ou cair sai de qualquer um dos dois. Também liga os estados de ar (pulo/queda).
-        private static void BuildIdleStates(AnimatorStateMachine machine, AnimatorState locomotion, AnimatorState air, AnimatorState airStanding, AnimatorState roll, List<AnimationClip> idles, ActionStates actionStates, ActionClips actionClips)
+        // Devolve a entrada do idle (Idle0).
+        private static AnimatorState BuildIdleStates(AnimatorStateMachine machine, AnimatorState locomotion, AnimatorState air, AnimatorState airStanding, AnimatorState roll, List<AnimationClip> idles, ActionStates actionStates, ActionClips actionClips)
         {
             AnimatorState[] states = new AnimatorState[idles.Count];
             for (int i = 0; i < idles.Count; i++)
@@ -889,6 +995,47 @@ namespace PROCEDURAL_GAME.EditorTools
             AddExit(actionStates.kick, states[0], actionClips.kick, true);
             AddExit(actionStates.cross, states[0], actionClips.cross, true);
             AddExit(actionStates.crouchUp, states[0], actionClips.crouchUp);
+            return states[0];
+        }
+
+        /// <summary>
+        /// Natação: um estado com mistura 1D boiar -> nadar (SwimBlend) e ritmo SwimSpeed. Entra de QUALQUER estado assim que o Player está na
+        /// água (pulando, caindo, andando, rolando); sai para o que a manete pede quando volta a pisar no fundo. Morrer na água desliga
+        /// "Swimming" (PlayerAnimator), então a morte não é interrompida por esta entrada.
+        /// </summary>
+        private static void BuildSwimState(AnimatorController controller, AnimatorStateMachine machine, AnimatorState locomotion, AnimatorState idleEntry, AnimationClip swimIdle, AnimationClip swimForward)
+        {
+            AnimatorState swim = controller.CreateBlendTreeInController("Swim", out BlendTree tree, 0);
+            tree.blendType = BlendTreeType.Simple1D;
+            tree.blendParameter = "SwimBlend";
+            tree.useAutomaticThresholds = false;
+            tree.AddChild(swimIdle, 0f);
+            tree.AddChild(swimForward, 1f);
+            swim.speedParameterActive = true;
+            swim.speedParameter = "SwimSpeed";
+
+            AnimatorStateTransition enter = machine.AddAnyStateTransition(swim);
+            enter.canTransitionToSelf = false;
+            enter.hasExitTime = false;
+            enter.hasFixedDuration = true;
+            enter.duration = SwimFade;
+            enter.AddCondition(AnimatorConditionMode.If, 0f, "Swimming");
+
+            AnimatorStateTransition toMove = AddSwimExit(swim, locomotion);
+            toMove.AddCondition(AnimatorConditionMode.Greater, MoveSpeed, "Speed");
+            AnimatorStateTransition toIdle = AddSwimExit(swim, idleEntry);
+            toIdle.AddCondition(AnimatorConditionMode.Less, StopSpeed, "Speed");
+            AddSwimExit(swim, locomotion);
+        }
+
+        private static AnimatorStateTransition AddSwimExit(AnimatorState swim, AnimatorState to)
+        {
+            AnimatorStateTransition exit = swim.AddTransition(to);
+            exit.hasExitTime = false;
+            exit.hasFixedDuration = true;
+            exit.duration = SwimFade;
+            exit.AddCondition(AnimatorConditionMode.IfNot, 0f, "Swimming");
+            return exit;
         }
 
         private struct ActionClips
@@ -1239,6 +1386,7 @@ namespace PROCEDURAL_GAME.EditorTools
             public AnimationCurve distance;
             public float naturalSpeed;
             public AnimationCurve fallLift;
+            public float fallStart;
         }
 
         /// <summary>
@@ -1334,9 +1482,16 @@ namespace PROCEDURAL_GAME.EditorTools
                     apexHips = temp.transform.InverseTransformPoint(hips.position).y;
                 }
 
-                data.fallLift = BuildFallLift(hipsY, impact, apexHips, Samples);
-                Debug.Log($"Falling To Roll: no começo o quadril está {hipsY[0] - apexHips:0.00} m acima do ápice do pulo (escala 1); " +
-                          $"corrigido na queda ({(apexHips - hipsY[0]) * PlayerScale:0.00} m no ápice, 0 ao tocar o chão).");
+                // A pose de queda começa onde o quadril do clipe já desceu até a altura do ápice do pulo: assim a troca de pose no ápice não
+                // tem diferença de altura (a correção que sobra é pequena e não depende do fade).
+                int fallStart = 0;
+                int lastStart = Mathf.Max(0, impact - Mathf.Max(1, Samples / 20));
+                while (fallStart < lastStart && hipsY[fallStart] > apexHips + 0.01f) fallStart++;
+
+                data.fallStart = (float)fallStart / Samples;
+                data.fallLift = BuildFallLift(hipsY, fallStart, impact, apexHips, Samples);
+                Debug.Log($"Falling To Roll: no começo o quadril está {hipsY[0] - apexHips:0.00} m acima do ápice do pulo (escala 1); a queda começa em {data.fallStart:0.00} " +
+                          $"(quadril a {hipsY[fallStart] - apexHips:0.00} m do ápice; o resto é corrigido até o toque).");
 
                 data.distance = MeasureRollDistance(clip, probe, data, out data.naturalSpeed, out float angle);
                 if (data.distance == null)
@@ -1369,26 +1524,28 @@ namespace PROCEDURAL_GAME.EditorTools
         /// ápice do pulo e chega à do toque no ritmo da descida do próprio clipe (nunca sobe); a correção é a diferença para o quadril do clipe.
         /// Depois do toque é zero: a rolagem fica como no clipe.
         /// </summary>
-        private static AnimationCurve BuildFallLift(float[] hipsY, int impact, float apexHips, int samples)
+        private static AnimationCurve BuildFallLift(float[] hipsY, int fallStart, int impact, float apexHips, int samples)
         {
-            float start = hipsY[0];
+            float start = hipsY[fallStart];
             float touch = hipsY[impact];
             float drop = start - touch;
+            int span = impact - fallStart;
 
-            Keyframe[] keys = new Keyframe[impact + 2];
+            Keyframe[] keys = new Keyframe[span + 2];
             float lowest = start;
-            for (int i = 0; i <= impact; i++)
+            for (int k = 0; k <= span; k++)
             {
+                int i = fallStart + k;
                 lowest = Mathf.Min(lowest, hipsY[i]);
-                float progress = drop > 0.05f ? Mathf.Clamp01((start - lowest) / drop) : (impact > 0 ? (float)i / impact : 1f);
+                float progress = drop > 0.05f ? Mathf.Clamp01((start - lowest) / drop) : (span > 0 ? (float)k / span : 1f);
                 if (i == impact) progress = 1f;
 
                 float wanted = Mathf.Lerp(apexHips, touch, progress);
-                keys[i] = new Keyframe((float)i / samples, (wanted - hipsY[i]) * PlayerScale);
+                keys[k] = new Keyframe((float)i / samples, (wanted - hipsY[i]) * PlayerScale);
             }
 
-            keys[impact + 1] = new Keyframe(1f, 0f);
-            if (keys[impact + 1].time <= keys[impact].time) System.Array.Resize(ref keys, impact + 1);
+            keys[span + 1] = new Keyframe(1f, 0f);
+            if (keys[span + 1].time <= keys[span].time) System.Array.Resize(ref keys, span + 1);
 
             // Tangentes lineares.
             for (int i = 0; i < keys.Length; i++)

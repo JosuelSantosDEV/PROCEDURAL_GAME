@@ -50,7 +50,7 @@ MonoBehaviour:
     cellSize: 520
     chance: 0.3
     radiusRange: {x: 28, y: 44}
-    maxDepth: 4.5
+    maxDepth: 9
     levelOffset: 6
     clearRadius: 250
     depressionMeters: 64
