@@ -43,8 +43,14 @@ namespace PROCEDURAL_GAME.EditorTools
         // Baixado SEM "In Place": o avanço da rolagem é medido no clipe e aplicado pelo CharacterController.
         private const string RollPath = Root + "/Animations/Falling To Roll.fbx";
 
-        // Fade da pose do ápice do pulo para a de queda do Falling To Roll (s) e, se o corpo tocar o chão ainda subindo (rampa), direto para a rolagem.
-        private const float RollFallFade = 0.2f;
+        // Poses no ar entre o pulo e a rolagem (Mixamo "Male Dynamic Pose 1/2", baixadas pelo usuário): do ápice até tocar o chão o corpo
+        // fica numa mistura das duas (1 no ápice, 2 com a velocidade de queda de um pouso no plano; quedas mais longas ficam na 2).
+        // A rolagem só entra ao tocar o chão, já no ponto do impacto do Falling To Roll.
+        private const string FallPose1Path = Root + "/Animations/Male Dynamic Pose 1.fbx";
+        private const string FallPose2Path = Root + "/Animations/Male Dynamic Pose 2.fbx";
+
+        // Fade do ápice do pulo para as poses no ar (s) e do toque no chão para a rolagem (s).
+        private const float RollFallFade = 0.25f;
         private const float RollTouchFade = 0.12f;
 
         // Fade do golpe para o pulo ou para andar quando a recuperação é cancelada (s).
@@ -246,11 +252,29 @@ namespace PROCEDURAL_GAME.EditorTools
             SwimPose swimForwardPose = canSwim ? MeasureSwimPose(modelAsset, swimForward, "nadar") : default;
 
             AnimationClip rollClip = AssetImporter.GetAtPath(RollPath) != null ? EnsureMixamoClip(RollPath, false) : null;
-            RollData roll = rollClip != null ? MeasureRoll(modelAsset, rollClip, FindClip(JumpPath), jumpPhases.apex) : default;
+            RollData roll = rollClip != null ? MeasureRoll(modelAsset, rollClip) : default;
             if (rollClip == null) Debug.LogWarning($"'{RollPath}' não encontrado: o pulo em movimento pousa sem rolar.");
 
+            // Poses no ar do pulo com rolagem (opcionais: sem elas, a descida segue no clipe de pulo e a rolagem entra ao tocar o chão).
+            AnimationClip fallPose1 = rollClip != null && AssetImporter.GetAtPath(FallPose1Path) != null ? EnsureMixamoClip(FallPose1Path, false) : null;
+            AnimationClip fallPose2 = rollClip != null && AssetImporter.GetAtPath(FallPose2Path) != null ? EnsureMixamoClip(FallPose2Path, false) : null;
+            bool hasFallPoses = fallPose1 != null && fallPose2 != null;
+            if (rollClip != null && !hasFallPoses) Debug.LogWarning("Poses no ar (Male Dynamic Pose 1/2) não encontradas: a descida do pulo com rolagem usa o clipe de pulo.");
+
+            // Cada pose sobe/desce o que for preciso para o quadril ficar na altura do quadril no ápice do pulo: a troca de pose no ápice não
+            // move o corpo na vertical.
+            float fallPose1Lift = 0f;
+            float fallPose2Lift = 0f;
+            if (hasFallPoses)
+            {
+                float apexHips = MeasureHips(modelAsset, FindClip(JumpPath), jumpPhases.apex);
+                fallPose1Lift = (apexHips - MeasureHips(modelAsset, fallPose1, 0f)) * PlayerScale;
+                fallPose2Lift = (apexHips - MeasureHips(modelAsset, fallPose2, 0f)) * PlayerScale;
+                Debug.Log($"Poses no ar: ajuste de altura {fallPose1Lift:0.00} m (pose 1) e {fallPose2Lift:0.00} m (pose 2) para o quadril ficar no do ápice do pulo.");
+            }
+
             AnimatorController controller = EnsureController(walkSpeed, sprintSpeed, idles, walkClips, runClips, walkScales, runScales, jumpPhases, standingJump, standingPhases, actionClips, rollClip,
-                canSwim ? swimIdle : null, canSwim ? swimForward : null);
+                hasFallPoses ? fallPose1 : null, hasFallPoses ? fallPose2 : null, canSwim ? swimIdle : null, canSwim ? swimForward : null);
             if (controller == null) return;
 
             Transform player = movement.transform;
@@ -303,8 +327,8 @@ namespace PROCEDURAL_GAME.EditorTools
             }
             animatorSo.FindProperty("walkNaturalSpeed").floatValue = walkNatural;
             animatorSo.FindProperty("runNaturalSpeed").floatValue = runNatural;
-            animatorSo.FindProperty("rollFallLift").animationCurveValue = rollClip != null && roll.fallLift != null ? roll.fallLift : new AnimationCurve();
-            animatorSo.FindProperty("rollFallStartPhase").floatValue = rollClip != null ? roll.fallStart : 0f;
+            animatorSo.FindProperty("fallPose1Lift").floatValue = fallPose1Lift;
+            animatorSo.FindProperty("fallPose2Lift").floatValue = fallPose2Lift;
             if (canSwim)
             {
                 // A pose de nadar sobe o que falta para a cabeça ficar na mesma altura da de boiar (na superfície).
@@ -784,7 +808,7 @@ namespace PROCEDURAL_GAME.EditorTools
             return clips;
         }
 
-        private static AnimatorController EnsureController(float walkSpeed, float sprintSpeed, List<AnimationClip> idles, AnimationClip[] walkClips, AnimationClip[] runClips, float[] walkScales, float[] runScales, JumpPhases jumpPhases, AnimationClip standingJump, JumpPhases standingPhases, ActionClips actionClips, AnimationClip rollClip, AnimationClip swimIdle, AnimationClip swimForward)
+        private static AnimatorController EnsureController(float walkSpeed, float sprintSpeed, List<AnimationClip> idles, AnimationClip[] walkClips, AnimationClip[] runClips, float[] walkScales, float[] runScales, JumpPhases jumpPhases, AnimationClip standingJump, JumpPhases standingPhases, ActionClips actionClips, AnimationClip rollClip, AnimationClip fallPose1, AnimationClip fallPose2, AnimationClip swimIdle, AnimationClip swimForward)
         {
             AnimationClip idle = idles[0];
             AnimationClip jump = FindClip(JumpPath);
@@ -823,6 +847,8 @@ namespace PROCEDURAL_GAME.EditorTools
             controller.AddParameter("RollFall", AnimatorControllerParameterType.Bool);
             controller.AddParameter("Rolling", AnimatorControllerParameterType.Bool);
             controller.AddParameter("RollPhase", AnimatorControllerParameterType.Float);
+            // Mistura das poses no ar (0 = pose 1, no ápice; 1 = pose 2, caindo rápido).
+            controller.AddParameter("FallBlend", AnimatorControllerParameterType.Float);
             // Natação: na água, mistura boiar (0) -> nadar (1) e ritmo da braçada.
             controller.AddParameter("Swimming", AnimatorControllerParameterType.Bool);
             controller.AddParameter("SwimBlend", AnimatorControllerParameterType.Float);
@@ -864,9 +890,11 @@ namespace PROCEDURAL_GAME.EditorTools
                 airStanding.timeParameter = "AirPhase";
             }
 
-            // Rolagem: a descida do pulo em movimento e a rolagem são o MESMO clipe (Falling To Roll), com o tempo vindo de RollPhase. As saídas
-            // do Air para ele vêm antes dos pousos (a primeira transição válida é a usada).
+            // Pulo em movimento com rolagem: sobe no Air; do ápice até o chão fica nas poses no ar (AirPose, mistura por FallBlend); ao tocar o
+            // chão entra a rolagem (Falling To Roll a partir do impacto, tempo em RollPhase, o mesmo ponto que move o corpo). As saídas do Air
+            // vêm antes dos pousos (a primeira transição válida é a usada). Sem as poses, a descida segue no Air.
             AnimatorState roll = null;
+            AnimatorState airPose = null;
             if (rollClip != null)
             {
                 roll = machine.AddState("Roll");
@@ -875,7 +903,20 @@ namespace PROCEDURAL_GAME.EditorTools
                 roll.timeParameterActive = true;
                 roll.timeParameter = "RollPhase";
 
-                AddBoolTransition(air, roll, "RollFall", RollFallFade);
+                if (fallPose1 != null && fallPose2 != null)
+                {
+                    airPose = controller.CreateBlendTreeInController("AirPose", out BlendTree poseTree, 0);
+                    poseTree.blendType = BlendTreeType.Simple1D;
+                    poseTree.blendParameter = "FallBlend";
+                    poseTree.useAutomaticThresholds = false;
+                    poseTree.AddChild(fallPose1, 0f);
+                    poseTree.AddChild(fallPose2, 1f);
+                    airPose.speed = 0f; // poses paradas: só a mistura muda
+
+                    AddBoolTransition(air, airPose, "RollFall", RollFallFade);
+                    AddBoolTransition(airPose, roll, "Rolling", RollTouchFade);
+                }
+
                 AddBoolTransition(air, roll, "Rolling", RollTouchFade);
             }
 
@@ -905,6 +946,14 @@ namespace PROCEDURAL_GAME.EditorTools
             toFall.AddCondition(AnimatorConditionMode.IfNot, 0f, "Grounded");
 
             AnimatorState idleEntry = BuildIdleStates(machine, locomotion, air, airStanding, roll, idles, actionStates, actionClips);
+
+            // Pousou sem rolar (trocou para a 1ª pessoa no ar, por exemplo): sai das poses no ar como de um pouso.
+            if (airPose != null)
+            {
+                AddRollExit(airPose, locomotion).AddCondition(AnimatorConditionMode.Greater, MoveSpeed, "Speed");
+                AddRollExit(airPose, idleEntry).AddCondition(AnimatorConditionMode.Less, StopSpeed, "Speed");
+                AddRollExit(airPose, locomotion);
+            }
             if (swimIdle != null && swimForward != null) BuildSwimState(controller, machine, locomotion, idleEntry, swimIdle, swimForward);
 
             // IK dos pés (PlayerFootIK): o callback OnAnimatorIK só roda com "IK Pass" ligado na camada.
@@ -1385,8 +1434,6 @@ namespace PROCEDURAL_GAME.EditorTools
             public float exit;
             public AnimationCurve distance;
             public float naturalSpeed;
-            public AnimationCurve fallLift;
-            public float fallStart;
         }
 
         /// <summary>
@@ -1394,7 +1441,7 @@ namespace PROCEDURAL_GAME.EditorTools
         /// quadril), quando fica de pé de novo (quadril volta a 85% da altura final depois do ponto mais baixo) e quantos metros o corpo
         /// avança ao longo do clipe (curva RootT do humanoide = centro do corpo, em unidades do avatar). Tudo já na escala do Player.
         /// </summary>
-        private static RollData MeasureRoll(GameObject modelAsset, AnimationClip clip, AnimationClip jumpClip, float jumpApexPhase)
+        private static RollData MeasureRoll(GameObject modelAsset, AnimationClip clip)
         {
             RollData fallback = new RollData { impact = 0.25f, exit = 0.85f, distance = null, naturalSpeed = 4f };
             const int Samples = 90;
@@ -1473,25 +1520,6 @@ namespace PROCEDURAL_GAME.EditorTools
                     exit = Mathf.Clamp((float)exit / Samples, (float)impact / Samples + 0.1f, 0.97f)
                 };
 
-                // Altura do quadril no ápice do pulo (Jump.fbx): é onde a pose de queda tem de começar.
-                float apexHips = hipsY[impact];
-                if (jumpClip != null)
-                {
-                    temp.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
-                    jumpClip.SampleAnimation(temp, jumpClip.length * jumpApexPhase);
-                    apexHips = temp.transform.InverseTransformPoint(hips.position).y;
-                }
-
-                // A pose de queda começa onde o quadril do clipe já desceu até a altura do ápice do pulo: assim a troca de pose no ápice não
-                // tem diferença de altura (a correção que sobra é pequena e não depende do fade).
-                int fallStart = 0;
-                int lastStart = Mathf.Max(0, impact - Mathf.Max(1, Samples / 20));
-                while (fallStart < lastStart && hipsY[fallStart] > apexHips + 0.01f) fallStart++;
-
-                data.fallStart = (float)fallStart / Samples;
-                data.fallLift = BuildFallLift(hipsY, fallStart, impact, apexHips, Samples);
-                Debug.Log($"Falling To Roll: no começo o quadril está {hipsY[0] - apexHips:0.00} m acima do ápice do pulo (escala 1); a queda começa em {data.fallStart:0.00} " +
-                          $"(quadril a {hipsY[fallStart] - apexHips:0.00} m do ápice; o resto é corrigido até o toque).");
 
                 data.distance = MeasureRollDistance(clip, probe, data, out data.naturalSpeed, out float angle);
                 if (data.distance == null)
@@ -1519,42 +1547,34 @@ namespace PROCEDURAL_GAME.EditorTools
             }
         }
 
-        /// <summary>
-        /// Correção de altura (m, na escala do Player) do começo do Falling To Roll até o toque no chão. O quadril desejado sai da altura do
-        /// ápice do pulo e chega à do toque no ritmo da descida do próprio clipe (nunca sobe); a correção é a diferença para o quadril do clipe.
-        /// Depois do toque é zero: a rolagem fica como no clipe.
-        /// </summary>
-        private static AnimationCurve BuildFallLift(float[] hipsY, int fallStart, int impact, float apexHips, int samples)
+        // Altura (m, escala 1, acima da origem do modelo) do quadril num ponto (0..1) de um clipe. 1 m se não der para medir.
+        private static float MeasureHips(GameObject modelAsset, AnimationClip clip, float phase)
         {
-            float start = hipsY[fallStart];
-            float touch = hipsY[impact];
-            float drop = start - touch;
-            int span = impact - fallStart;
+            if (clip == null) return 1f;
 
-            Keyframe[] keys = new Keyframe[span + 2];
-            float lowest = start;
-            for (int k = 0; k <= span; k++)
+            GameObject temp = null;
+            try
             {
-                int i = fallStart + k;
-                lowest = Mathf.Min(lowest, hipsY[i]);
-                float progress = drop > 0.05f ? Mathf.Clamp01((start - lowest) / drop) : (span > 0 ? (float)k / span : 1f);
-                if (i == impact) progress = 1f;
+                temp = (GameObject)Object.Instantiate(modelAsset);
+                temp.hideFlags = HideFlags.HideAndDontSave;
 
-                float wanted = Mathf.Lerp(apexHips, touch, progress);
-                keys[k] = new Keyframe((float)i / samples, (wanted - hipsY[i]) * PlayerScale);
+                Animator probe = temp.GetComponent<Animator>();
+                Transform hips = probe != null && probe.isHuman ? probe.GetBoneTransform(HumanBodyBones.Hips) : null;
+                if (hips == null) throw new System.InvalidOperationException("quadril não encontrado");
+
+                temp.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+                clip.SampleAnimation(temp, clip.length * phase);
+                return temp.transform.InverseTransformPoint(hips.position).y;
             }
-
-            keys[span + 1] = new Keyframe(1f, 0f);
-            if (keys[span + 1].time <= keys[span].time) System.Array.Resize(ref keys, span + 1);
-
-            // Tangentes lineares.
-            for (int i = 0; i < keys.Length; i++)
+            catch (System.Exception e)
             {
-                keys[i].inTangent = i > 0 ? (keys[i].value - keys[i - 1].value) / (keys[i].time - keys[i - 1].time) : 0f;
-                keys[i].outTangent = i < keys.Length - 1 ? (keys[i + 1].value - keys[i].value) / (keys[i + 1].time - keys[i].time) : 0f;
+                Debug.LogWarning($"Não consegui medir o quadril em '{clip.name}' ({e.Message}).");
+                return 1f;
             }
-
-            return new AnimationCurve(keys);
+            finally
+            {
+                if (temp != null) Object.DestroyImmediate(temp);
+            }
         }
 
         // Curva (ponto 0..1 do clipe -> metros para a frente, já na escala do Player, nunca recuando) a partir da posição do centro do corpo
