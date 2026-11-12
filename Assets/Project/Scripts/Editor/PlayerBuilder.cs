@@ -84,6 +84,8 @@ namespace PROCEDURAL_GAME.EditorTools
         private const float BaseSwimVerticalSpeed = 1.25f;
         private const float BaseBuoyancy = 0.25f;
         private const float BaseDiveMinDepth = 2.5f;
+        // Água até esta profundidade dá pé (escala 1; 2,2 m na escala 2x, pouco acima da cintura de um corpo de 4 m): anda, não nada.
+        private const float BaseWadeDepth = 1.1f;
         // Boiando, o osso da cabeça fica um pouco acima da água (o rosto fora d'água).
         private const float BaseHeadAboveWater = 0.08f;
         // Fade de entrada e saída da natação (s).
@@ -360,6 +362,9 @@ namespace PROCEDURAL_GAME.EditorTools
             visibilitySo.FindProperty("animator").objectReferenceValue = animator;
             visibilitySo.ApplyModifiedPropertiesWithoutUndo();
 
+            // Capacete com lanterna (se os pacotes estiverem no projeto).
+            HeadLampBuilder.Build();
+
             EditorSceneManager.MarkSceneDirty(player.gameObject.scene);
             Selection.activeGameObject = player.gameObject;
             Debug.Log($"Personagem do Player criado (escala {PlayerScale}x; andar {walkSpeed} m/s, correr {sprintSpeed} m/s). Salve a cena (Ctrl+S) e dê Play.");
@@ -550,10 +555,12 @@ namespace PROCEDURAL_GAME.EditorTools
             so.FindProperty("buoyancy").floatValue = BaseBuoyancy * PlayerScale;
             so.FindProperty("diveMinDepth").floatValue = Mathf.Max(BaseDiveMinDepth * PlayerScale, floatDepth + 1f);
             so.FindProperty("floatDepth").floatValue = floatDepth;
+            so.FindProperty("wadeDepth").floatValue = BaseWadeDepth * PlayerScale;
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(movement);
 
-            Debug.Log($"Natação: boiando os pés ficam {floatDepth:0.00} m abaixo da água (começa a nadar com essa profundidade); mergulho a partir de {Mathf.Max(BaseDiveMinDepth * PlayerScale, floatDepth + 1f):0.0} m.");
+            float exitDepth = Mathf.Max(BaseWadeDepth * PlayerScale, floatDepth + 0.1f);
+            Debug.Log($"Natação: boiando os pés ficam {floatDepth:0.00} m abaixo da água; anda no fundo até {exitDepth:0.0} m de profundidade e nada a partir de {exitDepth + 0.3f:0.0} m; mergulho a partir de {Mathf.Max(BaseDiveMinDepth * PlayerScale, floatDepth + 1f):0.0} m.");
         }
 
         private struct SwimPose

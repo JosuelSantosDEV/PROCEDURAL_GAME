@@ -38,8 +38,8 @@ namespace PROCEDURAL_GAME.Player
         [Tooltip("Em 1ª pessoa com corpo visível a cabeça some (osso com escala 0) e levaria a cabeça da sombra junto: um elipsoide só-sombra no lugar dela repõe o contorno. Tamanho (largura, altura, profundidade) em metros na escala 1.")]
         [SerializeField] private Vector3 headShadowSize = new Vector3(0.16f, 0.23f, 0.2f);
 
-        private readonly List<SkinnedMeshRenderer> headParts = new List<SkinnedMeshRenderer>();
-        private readonly List<SkinnedMeshRenderer> bodyParts = new List<SkinnedMeshRenderer>();
+        private readonly List<Renderer> headParts = new List<Renderer>();
+        private readonly List<Renderer> bodyParts = new List<Renderer>();
         private Transform head;
         private Renderer headShadow;
         private bool firstPerson;
@@ -59,6 +59,8 @@ namespace PROCEDURAL_GAME.Player
             }
         }
 
+        private float eyeOffsetScale = 1f;
+
         /// <summary>
         /// Onde ficam os olhos do modelo em relação ao pivô do Player (altura e distância à frente do eixo do corpo, em metros no mundo),
         /// medidos na pose inicial (escala do modelo incluída). A câmera em 1ª pessoa usa isto em vez de um valor fixo à mão.
@@ -68,6 +70,21 @@ namespace PROCEDURAL_GAME.Player
             heightAbovePivot = eyeHeightAbovePivot;
             forward = eyeForwardOfPivot;
             return eyesMeasured;
+        }
+
+        /// <summary>
+        /// Olhos na pose ANIMADA deste frame (posição no mundo): osso da cabeça + o mesmo deslocamento até os olhos, orientado pelo corpo (não
+        /// pela cabeça, para a câmera não tremer com o balanço dela). A câmera em 1ª pessoa usa quando a animação leva a cabeça para longe da
+        /// posição em pé (golpes, coleta, natação). Chamar no LateUpdate, depois da animação.
+        /// </summary>
+        public bool TryGetAnimatedEyes(out Vector3 position)
+        {
+            position = default;
+            if (head == null || !eyesMeasured) return false;
+
+            // A escala do osso da cabeça vira 0 em 1ª pessoa: usa a medida na pose inicial.
+            position = head.position + transform.up * (eyesAboveHead * eyeOffsetScale) + transform.forward * (eyesForward * eyeOffsetScale);
+            return true;
         }
 
         private void Awake()
@@ -104,6 +121,7 @@ namespace PROCEDURAL_GAME.Player
             if (head == null) return;
 
             float scale = Mathf.Max(0.01f, head.lossyScale.y);
+            eyeOffsetScale = scale;
             Vector3 local = transform.InverseTransformPoint(head.position);
             eyeHeightAbovePivot = local.y + eyesAboveHead * scale;
             eyeForwardOfPivot = local.z + eyesForward * scale;
@@ -187,6 +205,16 @@ namespace PROCEDURAL_GAME.Player
             return headShadowMesh;
         }
 
+        /// <summary>
+        /// Acrescenta um objeto preso à cabeça (capacete, lanterna): some em 1ª pessoa junto com a cabeça, mas continua na sombra.
+        /// </summary>
+        public void AddHeadPart(Renderer part)
+        {
+            if (part == null || headParts.Contains(part)) return;
+            headParts.Add(part);
+            Apply();
+        }
+
         /// <summary>Chamado pela câmera: true = primeira pessoa.</summary>
         public void SetFirstPerson(bool value)
         {
@@ -233,9 +261,9 @@ namespace PROCEDURAL_GAME.Player
             return false;
         }
 
-        private static void SetShadowMode(List<SkinnedMeshRenderer> renderers, ShadowCastingMode mode)
+        private static void SetShadowMode(List<Renderer> renderers, ShadowCastingMode mode)
         {
-            foreach (SkinnedMeshRenderer meshRenderer in renderers)
+            foreach (Renderer meshRenderer in renderers)
             {
                 if (meshRenderer != null) meshRenderer.shadowCastingMode = mode;
             }

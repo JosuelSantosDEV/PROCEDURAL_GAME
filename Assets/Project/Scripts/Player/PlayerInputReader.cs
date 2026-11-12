@@ -24,6 +24,7 @@ namespace PROCEDURAL_GAME.Player
         private InputAction jumpAction;
         private InputAction sprintAction;
         private InputAction toggleCameraAction;
+        private InputAction flashlightAction;
         private PlayerMovement movement;
 
         /// <summary>Direção desejada (WASD / analógico esquerdo / joystick de tela), cada eixo entre -1 e 1.</summary>
@@ -61,6 +62,15 @@ namespace PROCEDURAL_GAME.Player
         /// <summary>Botão de pulo segurado (debaixo d'água: subir).</summary>
         public bool JumpHeld => jumpAction.IsPressed() || (mobileControls != null && mobileControls.JumpHeld);
 
+        /// <summary>True apenas no frame em que o botão da lanterna foi apertado (F / Y do gamepad / botão Lanterna na tela).</summary>
+        public bool FlashlightPressed => (flashlightAction != null && flashlightAction.WasPressedThisFrame()) || (mobileControls != null && mobileControls.FlashlightPressed);
+
+        /// <summary>Mostra no botão da tela se a lanterna está ligada.</summary>
+        public void ShowFlashlight(bool on)
+        {
+            if (mobileControls != null) mobileControls.SetFlashlight(on);
+        }
+
         /// <summary>True apenas no frame em que o botão de ataque foi apertado (só na tela, por enquanto).</summary>
         public bool AttackPressed => mobileControls != null && mobileControls.AttackPressed;
 
@@ -88,6 +98,7 @@ namespace PROCEDURAL_GAME.Player
             jumpAction = actionMap.FindAction("Jump", throwIfNotFound: true);
             sprintAction = actionMap.FindAction("Sprint", throwIfNotFound: true);
             toggleCameraAction = actionMap.FindAction("ToggleCamera", throwIfNotFound: true);
+            flashlightAction = actionMap.FindAction("Flashlight", throwIfNotFound: false);
             movement = GetComponent<PlayerMovement>();
         }
 

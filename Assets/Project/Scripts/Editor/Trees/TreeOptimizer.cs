@@ -22,7 +22,7 @@ namespace PROCEDURAL_GAME.EditorTools
     /// </summary>
     public static class TreeOptimizer
     {
-        private const string SourceFbx = "Assets/Mobile_FV/Resources/SourceMeshes.fbx";
+        private const string SourceFbx = "Assets/Mobile_FV/SourceAssets/SourceMeshes.fbx";
         private const string SourceRoot = "Assets/Mobile_FV/Prefabs";
         private const string OutputRoot = "Assets/Project/Trees";
 

@@ -60,6 +60,12 @@ namespace PROCEDURAL_GAME.CameraControl
         [Tooltip("Com o corpo visível: limite ao olhar para baixo (graus). Mais que isso a câmera passaria do pescoço (aberto, sem cabeça). Com 60° e campo de visão vertical de 60° a borda de baixo da tela chega a 90°: se vê peito, braços, pernas e pés.")]
         [SerializeField, Range(30f, 89f)] private float firstPersonMaxPitch = 55f;
 
+        [Tooltip("Com o corpo visível: em golpes, coleta e natação a câmera segue a cabeça animada (o gancho avança o corpo; nadando o corpo deita) em vez da altura dos olhos em pé. Tempo (s) da passagem entre os dois.")]
+        [SerializeField, Min(0.01f)] private float headFollowTime = 0.15f;
+
+        [Tooltip("Com o corpo visível: depois que a ação termina, a câmera ainda segue a cabeça por este tempo (s). Golpe cancelado pela manete: a animação do golpe ainda está saindo (o gancho com o corpo avançado), e a câmera voltando antes mostrava o pescoço.")]
+        [SerializeField, Min(0f)] private float headFollowGrace = 0.35f;
+
         [Tooltip("Com o corpo visível: plano de corte próximo (m) em primeira pessoa, para o peito e os braços perto da câmera não serem cortados.")]
         [SerializeField, Min(0.01f)] private float firstPersonNearClip = 0.1f;
 
@@ -108,6 +114,8 @@ namespace PROCEDURAL_GAME.CameraControl
         private float occludedTime;
         private float yaw;
         private float pitch;
+        private float headFollow;
+        private float headFollowUntil;
 
         public CameraMode Mode => mode;
 
@@ -223,6 +231,18 @@ namespace PROCEDURAL_GAME.CameraControl
                     }
 
                     eye += Quaternion.Euler(0f, yaw, 0f) * Vector3.forward * forward;
+
+                    // Golpes, coleta e natação levam a cabeça para longe da posição em pé (o gancho avança e volta; nadando o corpo deita): a câmera
+                    // passa a seguir a cabeça animada, senão o corpo aparece na frente dela. Andando fica fixa (sem balançar com os passos).
+                    if (playerMovement != null && (playerMovement.IsSwimming || playerMovement.ActionLocked)) headFollowUntil = Time.time + headFollowGrace;
+                    bool followHead = Time.time < headFollowUntil;
+                    if (Time.deltaTime > 0f) headFollow = Mathf.MoveTowards(headFollow, followHead ? 1f : 0f, Time.deltaTime / headFollowTime);
+
+                    if (headFollow > 0f && bodyVisibility.TryGetAnimatedEyes(out Vector3 animatedEyes))
+                    {
+                        Vector3 animated = animatedEyes + Quaternion.Euler(0f, yaw, 0f) * Vector3.forward * firstPersonForwardOffset;
+                        eye = Vector3.Lerp(eye, animated, Mathf.SmoothStep(0f, 1f, headFollow));
+                    }
                 }
 
                 transform.SetPositionAndRotation(eye, rotation);

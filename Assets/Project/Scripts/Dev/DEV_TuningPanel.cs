@@ -147,6 +147,7 @@ namespace PROCEDURAL_GAME.DevTools
             }
 
             DEV_BuildCamera();
+            DEV_BuildHeadLamp();
             DEV_BuildSurvival();
 
             // Para medir no aparelho quanto a variação da textura do chão custa. É global: vale até fechar o jogo.
@@ -178,6 +179,85 @@ namespace PROCEDURAL_GAME.DevTools
                 v => cam.ThirdPersonDistance = v, () => cam.ThirdPersonDistance, false);
             DEV_CreateStepper("Altura (m)", cam.PivotHeight, "0.0", new[] { -0.5f, -0.1f }, new[] { 0.1f, 0.5f },
                 v => cam.PivotHeight = v, () => cam.PivotHeight, false);
+        }
+
+        // Capacete com lanterna: encaixe na cabeça e luz, ao vivo. Vale só nesta partida; COPIAR VALORES leva os números.
+        private void DEV_BuildHeadLamp()
+        {
+            HeadLamp lamp = FindObjectOfType<HeadLamp>();
+            if (lamp == null || !lamp.enabled) return;
+
+            Text section = UiKit.CreateText(content, "Section", "CAPACETE E LANTERNA", 30, TextAnchor.LowerLeft, UiKit.MutedTextColor);
+            UiKit.SetLayout(section.gameObject, preferredHeight: 56f);
+
+            DEV_CreateToggle(content, "LANTERNA LIGADA", lamp.IsOn, 0f, 80f, 34, on => lamp.SetOn(on));
+            DEV_CreateToggle(content, "NOITE (TESTE)", DEV_nightOn, 0f, 80f, 34, DEV_SetNight);
+            DEV_CreateToggle(content, "CAPACETE GIRADO 180°", lamp.HelmetBackwards, 0f, 80f, 34, on => lamp.HelmetBackwards = on);
+            DEV_CreateToggle(content, "ESCONDER CABELO", lamp.HideHair, 0f, 80f, 34, on => lamp.HideHair = on);
+
+            DEV_CreateStepper("Altura (m)", lamp.GearOffset.y, "0.00", new[] { -0.05f, -0.01f }, new[] { 0.01f, 0.05f },
+                v => lamp.GearOffset = new Vector3(lamp.GearOffset.x, v, lamp.GearOffset.z), () => lamp.GearOffset.y, false);
+            DEV_CreateStepper("Frente (m)", lamp.GearOffset.z, "0.00", new[] { -0.05f, -0.01f }, new[] { 0.01f, 0.05f },
+                v => lamp.GearOffset = new Vector3(lamp.GearOffset.x, lamp.GearOffset.y, v), () => lamp.GearOffset.z, false);
+            DEV_CreateStepper("Escala", lamp.GearScale, "0.00", new[] { -0.1f, -0.02f }, new[] { 0.02f, 0.1f },
+                v => lamp.GearScale = v, () => lamp.GearScale, false);
+            DEV_CreateStepper("Incl. capacete", lamp.GearPitch, "0", new[] { -5f, -1f }, new[] { 1f, 5f },
+                v => lamp.GearPitch = v, () => lamp.GearPitch, false);
+            DEV_CreateStepper("Incl. lanterna", lamp.LampPitch, "0", new[] { -5f, -1f }, new[] { 1f, 5f },
+                v => lamp.LampPitch = v, () => lamp.LampPitch, false);
+            DEV_CreateStepper("Luz (int.)", lamp.Intensity, "0.0", new[] { -1f, -0.2f }, new[] { 0.2f, 1f },
+                v => lamp.Intensity = v, () => lamp.Intensity, false);
+            DEV_CreateStepper("Alcance (m)", lamp.Range, "0", new[] { -10f, -2f }, new[] { 2f, 10f },
+                v => lamp.Range = v, () => lamp.Range, false);
+            DEV_CreateStepper("Ângulo (°)", lamp.SpotAngle, "0", new[] { -10f, -2f }, new[] { 2f, 10f },
+                v => lamp.SpotAngle = v, () => lamp.SpotAngle, false);
+        }
+
+        // Noite de teste (até existir o ciclo de dia e noite): escurece sol, ambiente, neblina e céu; desligar devolve os valores.
+        private static bool DEV_nightOn;
+        private static Color DEV_dayAmbient;
+        private static Color DEV_dayFog;
+        private static float DEV_daySun;
+        private static Color DEV_dayBackground;
+
+        private static void DEV_SetNight(bool on)
+        {
+            if (on == DEV_nightOn) return;
+
+            Light sun = RenderSettings.sun;
+            if (sun == null)
+            {
+                foreach (Light candidate in FindObjectsOfType<Light>())
+                {
+                    if (candidate.type != LightType.Directional) continue;
+                    sun = candidate;
+                    break;
+                }
+            }
+
+            Camera cam = Camera.main;
+
+            if (on)
+            {
+                DEV_dayAmbient = RenderSettings.ambientLight;
+                DEV_dayFog = RenderSettings.fogColor;
+                DEV_daySun = sun != null ? sun.intensity : 0f;
+                DEV_dayBackground = cam != null ? cam.backgroundColor : Color.black;
+
+                RenderSettings.ambientLight = DEV_dayAmbient * 0.12f;
+                RenderSettings.fogColor = DEV_dayFog * 0.1f;
+                if (sun != null) sun.intensity = DEV_daySun * 0.04f;
+                if (cam != null) cam.backgroundColor = RenderSettings.fogColor;
+            }
+            else
+            {
+                RenderSettings.ambientLight = DEV_dayAmbient;
+                RenderSettings.fogColor = DEV_dayFog;
+                if (sun != null) sun.intensity = DEV_daySun;
+                if (cam != null) cam.backgroundColor = DEV_dayBackground;
+            }
+
+            DEV_nightOn = on;
         }
 
         // Sobrevivência: ainda não há comida no mundo nem ataques; estes botões testam o que depende deles. Só em jogo.
@@ -360,6 +440,15 @@ namespace PROCEDURAL_GAME.DevTools
             {
                 text.Append(string.Format(CultureInfo.InvariantCulture, "Camera 3a pessoa: distancia {0:0.0} m, altura {1:0.0} m\n",
                     cam.ThirdPersonDistance, cam.PivotHeight));
+            }
+
+            HeadLamp lamp = FindObjectOfType<HeadLamp>();
+            if (lamp != null)
+            {
+                text.Append(string.Format(CultureInfo.InvariantCulture,
+                    "Capacete: altura {0:0.00} m, frente {1:0.00} m, escala {2:0.00}, inclinacao {8:0}, lanterna {9:0}, girado {3}, sem cabelo {4}; luz {5:0.0}, alcance {6:0} m, angulo {7:0}\n",
+                    lamp.GearOffset.y, lamp.GearOffset.z, lamp.GearScale, lamp.HelmetBackwards, lamp.HideHair, lamp.Intensity, lamp.Range, lamp.SpotAngle,
+                    lamp.GearPitch, lamp.LampPitch));
             }
 
             foreach (ScatterProfile profile in DEV_TunableProfiles()) text.Append(DEV_TuningStore.Instance.DEV_BuildReport(profile));

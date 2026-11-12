@@ -24,6 +24,7 @@ namespace PROCEDURAL_GAME.MobileInput
         [SerializeField] private TouchButton sprintButton;
         [SerializeField] private TouchButton toggleCameraButton;
         [SerializeField] private TouchButton attackButton;
+        [SerializeField] private TouchButton flashlightButton;
 
         private CanvasGroup canvasGroup;
         private Image joystickBase;
@@ -47,6 +48,14 @@ namespace PROCEDURAL_GAME.MobileInput
         public bool SprintOn { get; private set; }
 
         public bool ToggleCameraPressed => toggleCameraButton != null && toggleCameraButton.WasPressedThisFrame;
+
+        public bool FlashlightPressed => flashlightButton != null && flashlightButton.WasPressedThisFrame;
+
+        /// <summary>Botão da lanterna aceso (ligada) ou não.</summary>
+        public void SetFlashlight(bool on)
+        {
+            if (flashlightButton != null) flashlightButton.SetToggled(on);
+        }
 
         private void Awake()
         {

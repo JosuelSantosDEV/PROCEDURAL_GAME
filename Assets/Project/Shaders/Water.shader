@@ -49,6 +49,9 @@ Shader "PROCEDURAL_GAME/Water"
             #pragma fragment Frag
 
             #pragma multi_compile_fog
+            // Luzes extras (lanterna) por pixel, com máscara de luz (cookie).
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fragment _ _LIGHT_COOKIES
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -173,12 +176,26 @@ Shader "PROCEDURAL_GAME/Water"
                 // Cor da água em si (a luz própria evita o preto com o ambiente escuro).
                 half3 diffuse = baseColor * (ambient + mainLight.color * 0.35h + _SelfLight * lightLevel);
 
+                // Lanterna (luzes extras): ilumina a água e faz o brilho dela nas ondas.
+                half3 extraGlint = half3(0.0h, 0.0h, 0.0h);
+            #if defined(_ADDITIONAL_LIGHTS)
+                uint lightCount = GetAdditionalLightsCount();
+                for (uint lightIndex = 0u; lightIndex < lightCount; ++lightIndex)
+                {
+                    Light light = GetAdditionalLight(lightIndex, input.positionWS, half4(1, 1, 1, 1));
+                    half3 lightColor = light.color * light.distanceAttenuation;
+                    diffuse += baseColor * lightColor * saturate(dot(normal, light.direction));
+                    half3 lightHalf = normalize(light.direction + viewDir);
+                    extraGlint += lightColor * pow(saturate(dot(normal, lightHalf)), _GlintSharpness) * _Glint;
+                }
+            #endif
+
                 // Fresnel de Schlick: de cima reflete pouco (_Reflectivity); em ângulo raso reflete o céu/neblina quase por inteiro.
                 half ndv = saturate(dot(normal, viewDir));
                 half fresnel = _Reflectivity + (1.0h - _Reflectivity) * pow(1.0h - ndv, 5.0h);
                 half3 sky = unity_FogColor.rgb * _SkyBrightness;
 
-                half3 color = lerp(diffuse, sky, fresnel) + mainLight.color * glint;
+                half3 color = lerp(diffuse, sky, fresnel) + mainLight.color * glint + extraGlint;
                 color = lerp(color, _FoamColor.rgb * (ambient * 2.0h + mainLight.color * 0.5h + 0.15h * lightLevel), foam);
 
                 // A espuma aparece mesmo onde a água é rasa e transparente.

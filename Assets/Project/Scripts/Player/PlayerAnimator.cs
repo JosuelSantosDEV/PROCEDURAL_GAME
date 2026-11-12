@@ -96,6 +96,9 @@ namespace PROCEDURAL_GAME.Player
         [Tooltip("Ajuste de altura (m, já na escala) da pose no ar (Male Dynamic Pose 1) para o quadril ficar na altura do quadril no ápice do pulo: a troca de pose no ápice não sobe nem desce o corpo. Medido pelo menu.")]
         [SerializeField] private float fallPoseLift;
 
+        [Tooltip("A pose no ar entra ainda na subida, quando a velocidade de subida cai a esta fração da de saída do chão (0,5 = metade do tempo de subida; 0 = só no ápice).")]
+        [SerializeField, Range(0f, 1f)] private float fallPoseStartFraction = 0.5f;
+
         [Header("Natação")]
         [Tooltip("Quanto o corpo sobe (m, já na escala) na pose de nadar para a frente, para a cabeça ficar na superfície como na pose de boiar. Medido pelo menu.")]
         [SerializeField] private float swimForwardLift;
@@ -292,9 +295,10 @@ namespace PROCEDURAL_GAME.Player
         {
             if (!hasRollParameters) return;
 
-            // Sem checar o chão: no frame em que o corpo toca o chão a rolagem só começa no frame seguinte (PlayerMovement), e "descendo"
-            // tem de valer até lá, senão o Animator veria um frame sem descida nem rolagem e sairia do estado.
-            bool fall = movement.RollArmed && movement.VerticalVelocity < 0f;
+            // "Na pose no ar": de metade da subida (fallPoseStartFraction) até tocar o chão. Sem checar o chão: no frame em que o corpo toca o
+            // chão a rolagem só começa no frame seguinte (PlayerMovement), e isto tem de valer até lá, senão o Animator veria um frame sem pose
+            // nem rolagem e sairia do estado.
+            bool fall = movement.RollArmed && movement.VerticalVelocity < movement.JumpVelocity * fallPoseStartFraction;
 
             if (movement.IsRolling)
             {

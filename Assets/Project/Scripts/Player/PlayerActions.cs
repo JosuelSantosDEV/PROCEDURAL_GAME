@@ -244,6 +244,9 @@ namespace PROCEDURAL_GAME.Player
 
             if (Time.time > attackEndsAt + comboResetSeconds) comboIndex = 0;
 
+            // Em 1ª pessoa o chute fica de fora (a perna subindo na frente da câmera não fica bom): só gancho e direto, alternados.
+            if (comboIndex == 1 && movement.FaceCamera) comboIndex = 2;
+
             float seconds;
             Vector2 window;
             switch (comboIndex)

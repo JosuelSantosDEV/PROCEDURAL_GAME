@@ -1,5 +1,6 @@
 // Terreno colorido por cor de vértice (calculada em ChunkMeshBuilder) e, opcionalmente, com texturas de chão que se repetem.
-// Iluminação simples e barata para celular: luz principal + luz ambiente + neblina.
+// Iluminação simples e barata para celular: luz principal + luz ambiente + neblina, mais as luzes extras por pixel (a lanterna do
+// Player, com máscara/cookie). Sem luz extra na cena o laço não roda.
 //
 // Texturas do chão (opcionais): até 3 (_GroundTex, _GroundTex2, _GroundTex3), uma por zona do mundo (estação do ano). Amostradas
 // pela posição do mundo (x, z), repetindo a cada 1 / _GroundTiling metros. O peso de cada textura em cada ponto vem do UV0 da
@@ -69,6 +70,9 @@ Shader "PROCEDURAL_GAME/TerrainVertexColor"
             #pragma multi_compile_fog
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
+            // Luzes extras (lanterna): só por pixel (a variante por vértice não é usada) e com máscara de luz (cookie).
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fragment _ _LIGHT_COOKIES
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -237,6 +241,17 @@ Shader "PROCEDURAL_GAME/TerrainVertexColor"
                 Light mainLight = GetMainLight(shadowCoord, input.positionWS.xyz, half4(1, 1, 1, 1));
 
                 half3 direct = mainLight.color * (saturate(dot(normalWS, mainLight.direction)) * mainLight.distanceAttenuation * mainLight.shadowAttenuation);
+
+            #if defined(_ADDITIONAL_LIGHTS)
+                // Lanterna (e outras luzes pontuais/spot): só difusa, como a luz principal. O cookie entra dentro do GetAdditionalLight.
+                uint lightCount = GetAdditionalLightsCount();
+                for (uint lightIndex = 0u; lightIndex < lightCount; ++lightIndex)
+                {
+                    Light light = GetAdditionalLight(lightIndex, input.positionWS.xyz, half4(1, 1, 1, 1));
+                    direct += light.color * (saturate(dot(normalWS, light.direction)) * light.distanceAttenuation * light.shadowAttenuation);
+                }
+            #endif
+
                 half3 ambient = SampleSH(normalWS);
 
                 half3 color = albedo * (direct + ambient);

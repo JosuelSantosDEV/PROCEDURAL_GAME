@@ -52,6 +52,7 @@ namespace PROCEDURAL_GAME.EditorTools
             TouchButton jump = CreateButton(canvas, "JumpButton", "Pular", new Vector2(1f, 0f), new Vector2(-440f, 110f), 160f, fill, ring);
             TouchButton sprint = CreateButton(canvas, "SprintButton", "Correr", new Vector2(1f, 0f), new Vector2(-430f, 300f), 140f, fill, ring);
             TouchButton toggleCamera = CreateButton(canvas, "ToggleCameraButton", "Câmera", new Vector2(1f, 1f), new Vector2(-110f, -110f), 110f, fill, ring);
+            TouchButton flashlight = CreateButton(canvas, "FlashlightButton", "Lanterna", new Vector2(1f, 1f), new Vector2(-110f, -240f), 110f, fill, ring);
 
             SerializedObject controlsSo = new SerializedObject(controls);
             controlsSo.FindProperty("joystick").objectReferenceValue = joystick;
@@ -60,6 +61,7 @@ namespace PROCEDURAL_GAME.EditorTools
             controlsSo.FindProperty("sprintButton").objectReferenceValue = sprint;
             controlsSo.FindProperty("toggleCameraButton").objectReferenceValue = toggleCamera;
             controlsSo.FindProperty("attackButton").objectReferenceValue = attack;
+            controlsSo.FindProperty("flashlightButton").objectReferenceValue = flashlight;
             controlsSo.ApplyModifiedPropertiesWithoutUndo();
 
             LinkToPlayerAndCamera(controls);

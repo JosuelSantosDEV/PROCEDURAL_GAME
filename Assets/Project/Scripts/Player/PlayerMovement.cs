@@ -94,8 +94,11 @@ namespace PROCEDURAL_GAME.Player
         [Tooltip("Boiando, quanto os pés ficam abaixo da superfície (m). Medido no clipe de boiar pelo menu: a cabeça fica fora d'água. Também é a profundidade a partir da qual o Player começa a nadar.")]
         [SerializeField, Min(0.1f)] private float floatDepth = 2.9f;
 
-        [Tooltip("Volta a andar quando o fundo fica mais raso que esta fração da profundidade de boiar (menor que 1: não fica trocando na beirada).")]
-        [SerializeField, Range(0.5f, 0.98f)] private float swimExitFraction = 0.85f;
+        [Tooltip("Água até esta profundidade (m) dá pé: o Player anda no fundo, nunca nada (nem mergulhado). Também nunca nada onde o fundo é mais raso que a profundidade de boiar, senão o corpo 'nadaria' encostado na areia.")]
+        [SerializeField, Min(0f)] private float wadeDepth = 2.2f;
+
+        [Tooltip("Margem (m) entre parar e voltar a nadar: na beirada o Player não fica trocando entre andar e nadar.")]
+        [SerializeField, Min(0f)] private float swimHysteresis = 0.3f;
 
         [Tooltip("Profundidade mínima (m) da água para dar para mergulhar.")]
         [SerializeField, Min(0f)] private float diveMinDepth = 5f;
@@ -378,13 +381,17 @@ namespace PROCEDURAL_GAME.Player
             bedDepth = waterLevel - world.GetHeight(position.x, position.z);
             float feetDepth = waterLevel - FeetY;
 
+            // Raso demais para nadar: dá pé, ou o corpo na altura de boiar encostaria no fundo.
+            float exitDepth = Mathf.Max(wadeDepth, floatDepth + 0.1f);
+
             if (!swimming)
             {
-                // Entra andando (o fundo chega à profundidade de boiar) ou caindo/pulando na água funda.
-                if (bedDepth >= floatDepth && feetDepth >= floatDepth * 0.9f) StartSwimming();
+                // Entra andando (o fundo passa da profundidade de nadar) ou caindo/pulando na água funda.
+                if (bedDepth >= exitDepth + swimHysteresis && feetDepth >= floatDepth * 0.9f) StartSwimming();
             }
-            else if (!submerged && bedDepth < floatDepth * swimExitFraction)
+            else if (bedDepth < exitDepth)
             {
+                // Chegou ao raso, na superfície ou mergulhado: fica de pé e anda (mergulhado, cai até o fundo). Nunca nada na areia.
                 StopSwimming();
             }
         }
